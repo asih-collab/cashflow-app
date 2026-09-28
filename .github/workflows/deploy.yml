@@ -47,10 +47,10 @@ jobs:
       - run: npm ci
       - name: Build
         env:
-          # リポジトリの Variables（Settings > Secrets and variables > Actions > Variables）から注入する。
+          # リポジトリの Variables または Secrets（Settings > Secrets and variables > Actions）から注入する。
           # Publishable key は公開前提の鍵だが、リポジトリには置かない方針。
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
           VITE_APP_VERSION: ${{ github.sha }}
         run: |
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
