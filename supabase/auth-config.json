@@ -1,0 +1,11 @@
+{
+  "_comment": "Management API（PATCH /v1/projects/{ref}/config/auth）に送る Auth 設定。scripts/supabase-apply.sh が使う。秘密情報は含まない。",
+  "site_url": "https://asih-collab.github.io/cashflow-app/",
+  "uri_allow_list": "https://asih-collab.github.io/cashflow-app/,https://asih-collab.github.io/cashflow-app/**,http://localhost:5173/**,http://127.0.0.1:4173/**",
+  "external_email_enabled": true,
+  "mailer_autoconfirm": false,
+  "mailer_otp_length": 6,
+  "mailer_otp_exp": 3600,
+  "mailer_subjects_magic_link": "【家計】ログイン用コード: {{ .Token }}",
+  "mailer_templates_magic_link_content": "<h2>家計アプリのログイン</h2>\n<p>アプリに次のコードを入力してください（1 時間有効）。</p>\n<p style=\"font-size:32px;font-weight:bold;letter-spacing:6px\">{{ .Token }}</p>\n<p>Safari で開いている場合は、<a href=\"{{ .ConfirmationURL }}\">このリンクを押してもログインできます</a>。</p>\n<p style=\"color:#888;font-size:12px\">心当たりがない場合はこのメールを無視してください。</p>"
+}
