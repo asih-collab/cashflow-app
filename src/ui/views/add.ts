@@ -8,6 +8,7 @@ import { childrenOf, parentsOf, categoryById } from '../../lib/categories';
 import type { AppContext, Route } from '../context';
 import { toast } from '../toast';
 import type { Category } from '../../lib/types';
+import { icon } from '../icons';
 
 const MAX_DIGITS = 7;
 const QUICK_COUNT = 8;
@@ -29,12 +30,12 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
 
   root.appendChild(
     h('div', { class: 'top' },
-      h('a', { href: '#/', 'data-testid': 'to-home', style: 'text-decoration:none' }, `← ${period.label} ${yen(stats.variableTotal)}`),
+      h('a', { href: '#/', 'data-testid': 'to-home', style: 'text-decoration:none' }, icon('back'), `${period.label} `, h('span', { class: 'num' }, yen(stats.variableTotal))),
       h('span', null, `${toDateString(new Date()).slice(5).replace('-', '/')} 今日`),
     ),
   );
 
-  const display = h('div', { class: 'display empty', 'data-testid': 'amount' }, '¥0');
+  const display = h('div', { class: 'display empty', 'data-testid': 'amount' }, h('span', { class: 'yen' }, '¥'), '0');
   root.appendChild(display);
 
   const cats = h('div', { class: 'cats', 'data-testid': 'categories' });
@@ -61,7 +62,7 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
       h('button', {
         class: 'key' + (k === '⌫' ? ' fn' : ''), type: 'button', 'data-key': k, 'aria-label': k === '⌫' ? '1 文字消す' : k,
         onClick: () => press(k),
-      }, k),
+      }, k === '⌫' ? icon('backspace') : k),
     );
   }
   root.appendChild(keypad);
@@ -124,7 +125,7 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
 
   function update(): void {
     const a = amount();
-    display.textContent = a > 0 ? `¥${group(a)}` : '¥0';
+    display.replaceChildren(h('span', { class: 'yen' }, '¥'), a > 0 ? group(a) : '0');
     display.classList.toggle('empty', a === 0);
     saveBtn.disabled = saving || a <= 0 || !selected;
     saveBtn.textContent = selected && a > 0 ? `${selected.name} ${yen(a)} を保存` : '保存';
