@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -35,9 +33,11 @@ jobs:
           path: playwright-report
           retention-days: 7
 
-  build:
+  deploy:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,19 +57,11 @@ jobs:
             echo "::warning::SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY が未設定です。端末内のみで動くビルドになります。"
           fi
           npm run build
-      - uses: actions/configure-pages@v5
+      # ビルド結果を gh-pages ブランチに置く。GitHub Pages はこのブランチを自動で公開する
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
+          commit_message: "publish: ${{ github.sha }}"

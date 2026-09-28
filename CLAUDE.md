@@ -11,7 +11,7 @@
 | ロジック | 純粋な TypeScript（テスト対象） | `src/lib/`（`period` 予算期間、`stats` 集計、`categories` 初期セットと並び、`store` データ操作、`sync` 同期、`supabase` 最小クライアント、`db` IndexedDB） |
 | オフライン | 自前の Service Worker | `src/sw.js`（テンプレート）→ `scripts/build-sw.mjs` が `dist/sw.js` を生成 |
 | データ | IndexedDB（端末が正）+ Supabase（Postgres, RLS） | `supabase/migrations/`、`supabase/README.md` |
-| 公開 | GitHub Pages（`main` への push で GitHub Actions が test → build → deploy） | `.github/workflows/deploy.yml` |
+| 公開 | GitHub Pages（`main` への push で GitHub Actions が test → build → `gh-pages` ブランチへ配置。Pages はそのブランチを公開する） | `.github/workflows/deploy.yml` |
 | ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/settings` 設定、`#/categories`、`#/login`）。`#/add?amount=1200&cat=デート` で値を渡せる（ショートカット用） | `src/main.ts` |
 
 公開 URL: `https://asih-collab.github.io/cashflow-app/`（`vite.config.ts` の `base` と一致させる）
