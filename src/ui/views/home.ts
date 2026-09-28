@@ -7,6 +7,8 @@ import type { AppContext } from '../context';
 import { toast } from '../toast';
 import { INSTALL_STEPS, isIOS, isStandalone } from '../install';
 import { syncStatusText } from './settings';
+import { artworkElement } from '../art';
+import { icon } from '../icons';
 
 const INSTALL_DISMISSED_KEY = 'cf.installHintDismissed';
 
@@ -17,26 +19,29 @@ export function renderHome(ctx: AppContext): HTMLElement {
   const root = h('div', { 'data-testid': 'home' });
 
   root.appendChild(
-    h('div', { class: 'row' },
-      h('h1', { class: 'grow' }, `${period.label}の支出`),
+    h('div', { class: 'row', style: 'margin-bottom:10px' },
+      h('div', { class: 'grow' }, h('div', { class: 'eyebrow' }, '今月'), h('h1', { style: 'margin:2px 0 0' }, `${period.label}の支出`)),
       h('span', { class: 'muted small' }, `残り ${period.daysLeft} 日`),
     ),
   );
 
-  // 主役: 今月の変動費合計（予算は段階 2）
+  // 主役: 今月の変動費合計（予算は段階 2）。背景はアートワーク
+  const now = new Date();
   root.appendChild(
     h('div', { class: 'card hero' },
-      h('div', { class: 'label' }, '今月の変動費'),
+      artworkElement('dusk', now.getFullYear() * 100 + now.getMonth() + 1),
+      h('div', { class: 'corner' }, `${now.getMonth() + 1}.${String(now.getDate()).padStart(2, '0')}`),
+      h('div', { class: 'label' }, '変動費の合計'),
       h('div', { class: 'big', 'data-testid': 'variable-total' }, yen(stats.variableTotal)),
-      h('div', { class: 'muted small' },
-        `${stats.expenseCount} 件 ・ 1 日あたり平均 ${yen(perDaySoFar(stats.variableTotal, period))}`,
+      h('div', { class: 'sub' },
+        `${stats.expenseCount} 件 ・ 1 日あたり ${yen(perDaySoFar(stats.variableTotal, period))}`,
       ),
     ),
   );
 
   root.appendChild(
     h('div', { class: 'fab-wrap' },
-      h('a', { class: 'btn primary big', href: '#/add', 'data-testid': 'go-add', style: 'text-decoration:none' }, '＋ 記録する'),
+      h('a', { class: 'btn primary big', href: '#/add', 'data-testid': 'go-add', style: 'text-decoration:none' }, icon('add'), '記録する'),
     ),
   );
 
@@ -51,7 +56,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
         h('div', { class: 'list-item', 'data-testid': 'breakdown-row' },
           h('div', { class: 'grow' },
             h('div', { class: 'row' },
-              h('span', { class: 'grow' }, b.name, h('span', { class: 'muted small' }, ` ${b.parentName} ・ ${b.count} 件`)),
+              h('span', { class: 'grow breakdown-name' }, b.name, h('span', { class: 'breakdown-meta' }, `${b.parentName} ・ ${b.count} 件`)),
               h('span', { class: 'amount' }, yen(b.amount)),
             ),
             h('div', { class: 'bar' }, h('i', { style: `width:${Math.max(3, Math.round((b.amount / max) * 100))}%` })),
@@ -88,7 +93,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
           ),
           h('span', { class: 'amount' }, yen(t.amount)),
           h('button', {
-            class: 'btn sm danger', type: 'button', 'aria-label': '削除',
+            class: 'btn sm danger', type: 'button', 'aria-label': '削除', title: '削除',
             onClick: async () => {
               await store.deleteTransaction(t.id);
               toast(`${cat?.name ?? '記録'} ${yen(t.amount)} を削除しました`, {
@@ -96,7 +101,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
                 onAction: () => void store.restoreTransaction(t.id),
               });
             },
-          }, '削除'),
+          }, icon('trash'), '削除'),
         ),
       );
     }

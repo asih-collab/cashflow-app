@@ -2,6 +2,7 @@
 // ホーム画面に追加したアプリは Safari と保存領域が別なので、ログイン情報をコピーして引き継ぐ。
 
 import { h } from '../dom';
+import { icon } from '../icons';
 import type { AppContext } from '../context';
 import { encodeHandoff } from '../../lib/handoff';
 import { toast } from '../toast';

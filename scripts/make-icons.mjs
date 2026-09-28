@@ -2,10 +2,19 @@
 import { chromium } from '@playwright/test';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
+import { readFileSync } from 'node:fs';
+const font = readFileSync(new URL('../public/fonts/InstrumentSerif-Regular.woff2', import.meta.url)).toString('base64');
 const svg = (size, pad) => `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="${pad ? 0 : 22}" fill="#1f6feb"/>
-  <text x="50" y="66" font-family="-apple-system, 'Hiragino Sans', sans-serif" font-size="${pad ? 40 : 46}" font-weight="700" fill="#fff" text-anchor="middle">¥</text>
+  <defs>
+    <style>@font-face{font-family:'IS';src:url(data:font/woff2;base64,${font}) format('woff2');}</style>
+    <radialGradient id="g" cx="30%" cy="20%" r="90%"><stop offset="0" stop-color="#3a4a5a"/><stop offset="1" stop-color="#17181c"/></radialGradient>
+    <radialGradient id="a" cx="75%" cy="80%" r="50%"><stop offset="0" stop-color="#b9673f" stop-opacity="0.8"/><stop offset="1" stop-color="#b9673f" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="${pad ? 0 : 22}" fill="url(#g)"/>
+  <rect width="100" height="100" rx="${pad ? 0 : 22}" fill="url(#a)"/>
+  <ellipse cx="52" cy="50" rx="44" ry="18" transform="rotate(-24 52 50)" fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="0.8"/>
+  <text x="50" y="${pad ? 68 : 70}" font-family="'IS', 'Hiragino Mincho ProN', Georgia, serif" font-size="${pad ? 52 : 60}" fill="#f4f1ea" text-anchor="middle">¥</text>
 </svg>`;
 
 const browser = await chromium.launch();

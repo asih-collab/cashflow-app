@@ -2,6 +2,7 @@
 // マジックリンクを押した場合も同じメールで動く（ホーム画面追加後は Safari と保存領域が分かれるため、コード入力を主にする）。
 
 import { h } from '../dom';
+import { icon } from '../icons';
 import type { AppContext } from '../context';
 import { SupabaseError } from '../../lib/supabase';
 import { toast } from '../toast';
@@ -12,7 +13,7 @@ const EMAIL_KEY = 'cf.loginEmail';
 
 export function renderLogin(ctx: AppContext): HTMLElement {
   const root = h('div', { 'data-testid': 'login' },
-    h('div', { class: 'row' }, h('a', { href: '#/settings', style: 'text-decoration:none' }, '← 戻る'), h('h1', { class: 'grow', style: 'margin:0 0 0 8px' }, 'ログイン')),
+    h('div', { class: 'row' }, h('a', { href: '#/settings', style: 'text-decoration:none;display:inline-flex', 'aria-label': '戻る' }, icon('back')), h('h1', { class: 'grow', style: 'margin:0 0 0 8px' }, 'ログイン')),
   );
   if (!ctx.client) {
     root.appendChild(h('div', { class: 'banner warn' }, '同期先（Supabase）の設定がこのビルドに入っていません。端末内のみで動きます。'));

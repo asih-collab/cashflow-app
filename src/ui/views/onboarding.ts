@@ -3,13 +3,18 @@
 import { h } from '../dom';
 import type { AppContext } from '../context';
 import { INSTALL_STEPS, isIOS, isStandalone } from '../install';
+import { artworkElement } from '../art';
 
 export const ONBOARDED_KEY = 'cf.onboarded';
 
 export function showOnboarding(ctx: AppContext): void {
-  const box = h('div', { class: 'box' },
+  const cover = h('div', { class: 'cover' },
+    artworkElement('moss', 42),
+    h('div', { class: 'eyebrow' }, 'Cashflow'),
     h('h1', null, 'ようこそ'),
-    h('p', null, '支払ったらすぐ、金額 → カテゴリ → 保存 の 3 タップで記録します。開けば今月いくら使ったかが見えます。'),
+  );
+  const box = h('div', { class: 'box' },
+    h('p', { style: 'margin-top:0' }, '支払ったらすぐ、金額 → カテゴリ → 保存 の 3 タップで記録します。開けば今月いくら使ったかが見えます。'),
   );
   if (isIOS() && !isStandalone()) {
     box.appendChild(h('div', { class: 'card' },
@@ -27,6 +32,6 @@ export function showOnboarding(ctx: AppContext): void {
     h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'onboard-login', onClick: () => done('/login') }, 'ログインする'),
     h('button', { class: 'btn big', type: 'button', 'data-testid': 'onboard-skip', onClick: () => done('') }, 'あとで（まず記録してみる）'),
   ));
-  const overlay = h('div', { class: 'overlay', 'data-testid': 'onboarding' }, box);
+  const overlay = h('div', { class: 'overlay', 'data-testid': 'onboarding' }, cover, box);
   document.body.appendChild(overlay);
 }

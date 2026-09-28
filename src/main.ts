@@ -16,6 +16,7 @@ import { renderLogin } from './ui/views/login';
 import { ONBOARDED_KEY, showOnboarding } from './ui/views/onboarding';
 import { renderHandoff } from './ui/views/handoff';
 import { isIOS, isStandalone } from './ui/install';
+import { icon } from './ui/icons';
 
 const SESSION_KEY = 'cf.session';
 
@@ -83,12 +84,12 @@ async function boot(): Promise<void> {
 
   function renderTabs(path: string): void {
     clear(tabbar);
-    const tab = (href: string, ico: string, label: string, active: boolean, extra = '') =>
-      h('a', { href, class: (active ? 'active ' : '') + extra, 'data-testid': `tab-${href.slice(2) || 'home'}` }, h('span', { class: 'ico', 'aria-hidden': 'true' }, ico), label);
+    const tab = (href: string, ico: 'home' | 'add' | 'settings', label: string, active: boolean, extra = '') =>
+      h('a', { href, class: (active ? 'active ' : '') + extra, 'data-testid': `tab-${href.slice(2) || 'home'}` }, icon(ico), label);
     tabbar.append(
-      tab('#/', '▤', 'ホーム', path === '/'),
-      tab('#/add', '＋', '記録', path === '/add', 'add'),
-      tab('#/settings', '⚙', '設定', path === '/settings' || path === '/categories' || path === '/login' || path === '/handoff'),
+      tab('#/', 'home', 'ホーム', path === '/'),
+      tab('#/add', 'add', '記録', path === '/add', 'add'),
+      tab('#/settings', 'settings', '設定', path === '/settings' || path === '/categories' || path === '/login' || path === '/handoff'),
     );
   }
 

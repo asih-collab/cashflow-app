@@ -48,6 +48,13 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 - Auth はメールのマジックリンク。無料プラン + 標準メール送信ではメール文面を変えられず 6 桁コードを載せられない。ホーム画面に追加した PWA は Safari と保存領域が別なので、Safari 着地時に `#/handoff` で「ログイン情報をコピー」→ PWA の `#/login` で貼り付け（`src/lib/handoff.ts`）。コード入力欄は文面にコードがある場合（独自 SMTP 設定時）用
 - 新規登録は `private.allowed_emails` にあるメールだけ（本人専用）
 
+## デザイン
+
+- 方向性はエディトリアル調（`docs/決定記録.md` 参照）。色・角丸・影などは `src/app.css` の `:root` の CSS 変数で管理し、ダークモードは `prefers-color-scheme` で切り替える
+- 数字は `.num` / `.amount`（Instrument Serif、`public/fonts/`）。見出し `h1` はセリフ、本文はシステムのゴシック
+- アートワークは `src/ui/art.ts`（SVG 生成。`variant` と `seed` で絵が変わる）、アイコンは `src/ui/icons.ts`
+- 画面を変えたら iPhone サイズのスクリーンショットで確認する（Playwright の `devices['iPhone 14']`、`colorScheme: 'dark'` も）
+
 ## 設計上の決まり
 
 - **記録は 3 タップ**（金額 → 中分類 → 保存）。これを超える入力は「詳細」に隠す。日付は今日、支払い手段は前回と同じ

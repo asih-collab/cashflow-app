@@ -3,6 +3,7 @@ import type { AppContext } from '../context';
 import type { SyncState } from '../../lib/sync';
 import { toast } from '../toast';
 import { INSTALL_STEPS } from '../install';
+import { icon } from '../icons';
 
 export function syncStatusText(s: SyncState): string {
   const last = s.lastSyncedAt ? new Date(s.lastSyncedAt) : null;
@@ -62,7 +63,7 @@ export function renderSettings(ctx: AppContext): HTMLElement {
 
   // ---- カテゴリ・支払い手段 ----
   const lists = h('div', { class: 'card' });
-  lists.appendChild(h('a', { class: 'list-item', href: '#/categories', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-categories' }, h('span', { class: 'grow' }, 'カテゴリ（追加・名前の変更・非表示）'), h('span', { class: 'muted' }, '›')));
+  lists.appendChild(h('a', { class: 'list-item', href: '#/categories', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-categories' }, h('span', { class: 'grow' }, 'カテゴリ（追加・名前の変更・非表示）'), h('span', { class: 'muted' }, icon('chevron'))));
   root.appendChild(h('h2', null, 'カテゴリと支払い手段'));
   root.appendChild(lists);
 

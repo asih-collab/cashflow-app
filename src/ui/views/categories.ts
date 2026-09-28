@@ -1,11 +1,12 @@
 import { h } from '../dom';
+import { icon } from '../icons';
 import { childrenOf, parentsOf } from '../../lib/categories';
 import type { AppContext } from '../context';
 
 export function renderCategories(ctx: AppContext): HTMLElement {
   const { store } = ctx;
   const root = h('div', { 'data-testid': 'categories-view' },
-    h('div', { class: 'row' }, h('a', { href: '#/settings', style: 'text-decoration:none' }, '← 設定'), h('h1', { class: 'grow', style: 'margin:0 0 0 8px' }, 'カテゴリ')),
+    h('div', { class: 'row' }, h('a', { href: '#/settings', style: 'text-decoration:none;display:inline-flex', 'aria-label': '設定に戻る' }, icon('back')), h('h1', { class: 'grow', style: 'margin:0 0 0 8px' }, 'カテゴリ')),
     h('div', { class: 'muted small', style: 'margin-bottom:12px' }, '記録画面には、使った回数の多い中分類から順に並びます。名前を押すと変更できます。'),
   );
   for (const p of parentsOf(store.categories)) {
