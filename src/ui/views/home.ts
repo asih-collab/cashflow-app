@@ -40,6 +40,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
       h('div', { class: 'sub' },
         h('span', null, 'COUNT', h('b', null, String(stats.expenseCount))),
         h('span', null, 'PER DAY', h('b', null, yen(perDaySoFar(stats.variableTotal, period)))),
+        h('span', null, 'INCOME', h('b', { 'data-testid': 'income-total', class: 'is-income' }, `+${yen(stats.incomeTotal)}`)),
       ),
       h('div', { class: 'progress', 'aria-hidden': 'true' }, h('i', { style: `width:${Math.round((elapsed / period.totalDays) * 100)}%` })),
       h('div', { class: 'progress-legend' },
@@ -102,7 +103,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
             h('div', null, cat?.name ?? '未分類', t.memo ? h('span', { class: 'muted small' }, ` ${t.memo}`) : null),
             h('div', { class: 'recent-meta' }, `${t.date.slice(5).replace('-', '/')}${pm ? ' · ' + pm.name : ''}`),
           ),
-          h('span', { class: 'amount' }, yen(t.amount)),
+          h('span', { class: 'amount' + (t.type === 'income' ? ' is-income' : '') }, t.type === 'income' ? `+${yen(t.amount)}` : yen(t.amount)),
           h('button', {
             class: 'btn danger icon-btn', type: 'button', 'aria-label': '削除', title: '削除',
             onClick: async () => {

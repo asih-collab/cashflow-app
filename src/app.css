@@ -197,3 +197,13 @@ input[type=date].input { color-scheme: dark; }
   .add-view .save { min-height: 48px; margin-top: 8px; }
 }
 @media (max-width: 360px) { .cat { font-size: 13px; letter-spacing: -0.02em; } }
+
+/* ---- 支出 / 収入の切り替え ---- */
+.segmented { display: flex; gap: 0; margin: 10px 0 0; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: 10px; padding: 2px; }
+.seg { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; padding: 6px 14px; border-radius: 8px; color: var(--muted); }
+.seg.on { background: var(--ink); color: var(--bg); }
+.add-view.income .display:not(.empty) { color: var(--good); }
+.add-view.income .display .yen { color: var(--good); }
+.add-view.income .cat.selected { background: var(--good); border-color: var(--good); color: var(--accent-ink); }
+.add-view.income .save.primary { background: var(--good); }
+.is-income { color: var(--good) !important; }

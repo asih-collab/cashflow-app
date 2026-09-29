@@ -39,9 +39,14 @@ export function statsFor(transactions: Transaction[], categories: Category[], pe
       incomeTotal += t.amount;
       continue;
     }
-    expenseCount++;
     const cat = t.category_id ? byId.get(t.category_id) : undefined;
     const kind = cat?.kind ?? 'variable';
+    if (kind === 'income') {
+      // 収入のカテゴリで支出として記録されたもの（返金の取り消しなど）は、収入から差し引く
+      incomeTotal -= t.amount;
+      continue;
+    }
+    expenseCount++;
     if (kind === 'variable') {
       variableTotal += t.amount;
       const key = t.category_id ?? '';

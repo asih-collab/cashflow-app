@@ -120,4 +120,33 @@ test.describe('クイック記録（F01）とホーム（F02）', () => {
     await page.reload();
     await expect(page.getByTestId('onboarding')).toHaveCount(0);
   });
+
+  test('収入に切り替えて記録でき、ホームに収入として出る（変動費には入らない）', async ({ page }) => {
+    await openApp(page, '#/add');
+    await page.getByTestId('mode-income').tap();
+    await expect(page.getByTestId('cat-給与')).toBeVisible();
+    await expect(page.getByTestId('cat-デート')).toHaveCount(0);
+    await tapDigits(page, '300000');
+    await page.getByTestId('cat-給与').tap();
+    await expect(page.getByTestId('save')).toHaveText('給与 +¥300,000 を保存');
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('toast')).toContainText('収入として記録');
+    await expect(page.getByTestId('income-total')).toHaveText('+¥300,000');
+    await expect(page.getByTestId('variable-total')).toHaveText('¥0');
+    await expect(page.getByTestId('recent-row').first()).toContainText('+¥300,000');
+    // 次に開いたときは支出に戻っている
+    await page.goto('./#/add');
+    await expect(page.getByTestId('cat-デート')).toBeVisible();
+  });
+
+  test('支出と収入を切り替えると、選んでいたカテゴリは外れる', async ({ page }) => {
+    await openApp(page, '#/add');
+    await tapDigits(page, '500');
+    await page.getByTestId('cat-デート').tap();
+    await page.getByTestId('mode-income').tap();
+    await expect(page.getByTestId('save')).toBeDisabled();
+    await page.getByTestId('mode-expense').tap();
+    await expect(page.getByTestId('cat-デート')).toHaveAttribute('aria-pressed', 'false');
+  });
 });

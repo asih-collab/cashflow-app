@@ -1,7 +1,7 @@
 // アプリのデータ層。画面はここだけを通してデータを読み書きする。
 
 import type { Db } from './db';
-import { seedCategories, orderedSubcategories } from './categories';
+import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
 import { toDateString } from './period';
 import type { Category, PaymentMethod, PaymentMethodType, Settings, SyncTable, Transaction } from './types';
@@ -67,10 +67,12 @@ export class AppStore {
     await this.reload();
     // 初期データの時刻は固定の古い値にする。別の端末で先に使っていた場合、そちらの変更（使用回数など）が必ず勝つようにするため
     const now = SEED_TS;
-    if (this.categories.length === 0) {
-      const seeds = seedCategories(now);
-      await this.db.putMany('categories', seeds);
-      for (const c of seeds) await this.syncer?.markDirty('categories', c.id, c.updated_at);
+    // 初期セットのうち、まだ持っていないものを足す（あとから追加した初期カテゴリ、例: 収入 にも対応）
+    const have = new Set(this.categories.map((c) => c.id));
+    const missing = seedCategories(now).filter((c) => !have.has(c.id));
+    if (missing.length > 0) {
+      await this.db.putMany('categories', missing);
+      for (const c of missing) await this.syncer?.markDirty('categories', c.id, c.updated_at);
     }
     if (this.paymentMethods.length === 0) {
       const seeds = seedPaymentMethods(now);
@@ -123,6 +125,10 @@ export class AppStore {
 
   get quickCategories(): Category[] {
     return orderedSubcategories(this.categories);
+  }
+
+  get incomeCategories(): Category[] {
+    return incomeSubcategories(this.categories);
   }
 
   async addTransaction(input: NewTransaction): Promise<Transaction> {

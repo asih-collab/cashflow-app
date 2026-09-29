@@ -85,6 +85,13 @@ const SEED: SeedParent[] = [
   { id: '11111111-0016-4000-8000-000000000000', name: 'その他', kind: 'variable', children: [
     { id: '11111111-0016-4000-8000-000000000001', name: 'その他' },
   ] },
+  { id: '11111111-0017-4000-8000-000000000000', name: '収入', kind: 'income', children: [
+    { id: '11111111-0017-4000-8000-000000000001', name: '給与' },
+    { id: '11111111-0017-4000-8000-000000000002', name: '賞与' },
+    { id: '11111111-0017-4000-8000-000000000003', name: '副業' },
+    { id: '11111111-0017-4000-8000-000000000004', name: '臨時収入' },
+    { id: '11111111-0017-4000-8000-000000000005', name: 'その他の収入' },
+  ] },
 ];
 
 /** クイック記録の初期の並び（04 の 3.2）。ここにない中分類は大分類の順 */
@@ -106,10 +113,10 @@ export function seedCategories(now: string): Category[] {
   return out;
 }
 
-/** 有効な中分類を、使用回数の多い順（同数なら初期の並び順）に返す */
+/** 有効な支出の中分類を、使用回数の多い順（同数なら初期の並び順）に返す */
 export function orderedSubcategories(all: Category[]): Category[] {
   return all
-    .filter((c) => c.parent_id !== null && c.is_active && !c.deleted_at)
+    .filter((c) => c.parent_id !== null && c.is_active && !c.deleted_at && c.kind !== 'income')
     .sort((a, b) => b.use_count - a.use_count || a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ja'));
 }
 
@@ -126,4 +133,11 @@ export function childrenOf(all: Category[], parentId: string): Category[] {
 export function categoryById(all: Category[], id: string | null): Category | undefined {
   if (!id) return undefined;
   return all.find((c) => c.id === id);
+}
+
+/** 有効な収入の中分類（使用回数順） */
+export function incomeSubcategories(all: Category[]): Category[] {
+  return all
+    .filter((c) => c.parent_id !== null && c.is_active && !c.deleted_at && c.kind === 'income')
+    .sort((a, b) => b.use_count - a.use_count || a.sort_order - b.sort_order);
 }

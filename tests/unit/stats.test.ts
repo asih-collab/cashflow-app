@@ -46,4 +46,23 @@ describe('statsFor', () => {
     // 9/28 時点: 経過 28 日
     expect(perDaySoFar(28000, period)).toBe(1000);
   });
+  it('収入のカテゴリで記録した収入は収入合計に入り、変動費には入らない', () => {
+    const s = statsFor([
+      tx('2026-09-25', 300000, '給与', { type: 'income' }),
+      tx('2026-09-26', 20000, '臨時収入', { type: 'income' }),
+      tx('2026-09-26', 1000, 'デート'),
+    ], cats, period);
+    expect(s.incomeTotal).toBe(320000);
+    expect(s.variableTotal).toBe(1000);
+    expect(s.expenseCount).toBe(1);
+  });
+  it('収入カテゴリで支出として記録されたもの（取り消し等）は収入から差し引き、件数に数えない', () => {
+    const s = statsFor([
+      tx('2026-09-25', 5000, '臨時収入', { type: 'income' }),
+      tx('2026-09-26', 2000, '臨時収入'),
+    ], cats, period);
+    expect(s.incomeTotal).toBe(3000);
+    expect(s.expenseCount).toBe(0);
+    expect(s.variableTotal).toBe(0);
+  });
 });

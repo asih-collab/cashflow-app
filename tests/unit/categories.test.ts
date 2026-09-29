@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { seedCategories, orderedSubcategories, parentsOf, childrenOf, OTHER_CATEGORY_ID } from '../../src/lib/categories';
+import { seedCategories, orderedSubcategories, incomeSubcategories, parentsOf, childrenOf, OTHER_CATEGORY_ID } from '../../src/lib/categories';
 
 describe('カテゴリ初期セット', () => {
   const all = seedCategories('2026-09-28T00:00:00.000Z');
-  it('大分類 16、中分類にデートを含む', () => {
-    expect(parentsOf(all)).toHaveLength(16);
+  it('大分類 17（うち収入 1）、中分類にデートを含む', () => {
+    expect(parentsOf(all)).toHaveLength(17);
     const names = all.filter((c) => c.parent_id).map((c) => c.name);
     expect(names).toContain('デート');
     expect(names).toContain('外食');
@@ -42,5 +42,12 @@ describe('カテゴリ初期セット', () => {
   it('childrenOf は親配下だけ', () => {
     const food = parentsOf(all).find((p) => p.name === '食費')!;
     expect(childrenOf(all, food.id).map((c) => c.name).sort()).toEqual(['カフェ', 'コンビニ', '外食', '食料品'].sort());
+  });
+  it('収入の中分類は支出の並びに出ず、収入用の一覧にだけ出る', () => {
+    const exp = orderedSubcategories(all).map((c) => c.name);
+    const inc = incomeSubcategories(all).map((c) => c.name);
+    expect(exp).not.toContain('給与');
+    expect(inc).toEqual(['給与', '賞与', '副業', '臨時収入', 'その他の収入']);
+    expect(all.find((c) => c.name === '給与')!.kind).toBe('income');
   });
 });
