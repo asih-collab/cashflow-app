@@ -204,7 +204,7 @@ export class Syncer {
       for (let i = 0; i < rows.length; i += 200) {
         const chunk = rows.slice(i, i + 200);
         const chunkEntries = pushed.slice(i, i + 200);
-        await this.withAuth((t) => this.client!.upsert(table, chunk, table === 'settings' ? 'user_id' : 'id', t));
+        await this.withAuth((t) => this.client!.upsert(table, chunk, table === 'settings' ? 'user_id' : 'user_id,id', t));
         for (const e of chunkEntries) {
           const cur = await this.db.get<OutboxEntry>('outbox', e.key);
           // 送信中にさらに変更された行は残す

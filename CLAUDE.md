@@ -1,6 +1,6 @@
 # cashflow-app — Claude Code 向けの案内
 
-個人向け支出管理・キャッシュフロー最適化アプリ。利用者は本人 1 名（iPhone の Safari / ホーム画面に追加した PWA）。
+個人向け支出管理・キャッシュフロー最適化アプリ。利用者は本人と、本人が許可した知人数人（iPhone の Safari / ホーム画面に追加した PWA）。データは利用者ごとに完全に分離（RLS + (user_id, id) の複合キー）。
 要件は非公開リポジトリ `asih-collab/Cash-Flow-Optimization` の `docs/requirements/` にある（00〜07）。**このリポジトリは公開なので、家計の数字・メールアドレス・鍵・トークンを絶対に含めない。**
 
 ## 構成
@@ -46,7 +46,7 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 - 反映手順とスキーマの説明は `supabase/README.md`
 - Management API は `api.supabase.com`。プロジェクトの `*.supabase.co` には Claude のクラウド環境から直接つなげない（テストはフェイクで行う）
 - Auth はメールのマジックリンク。無料プラン + 標準メール送信ではメール文面を変えられず 6 桁コードを載せられない。ホーム画面に追加した PWA は Safari と保存領域が別なので、Safari 着地時に `#/handoff` で「ログイン情報をコピー」→ PWA の `#/login` で貼り付け（`src/lib/handoff.ts`）。コード入力欄は文面にコードがある場合（独自 SMTP 設定時）用
-- 新規登録は `private.allowed_emails` にあるメールだけ（本人専用）
+- 新規登録は `private.allowed_emails` にあるメールだけ（管理者が追加）。利用者を増やす手順と独自 SMTP の設定は `supabase/README.md`
 
 ## デザイン
 

@@ -44,7 +44,7 @@ export function fakeServer(): FakeServer {
           s.clock.now += 1000;
           const synced = new Date(s.clock.now).toISOString();
           for (const row of body as Record<string, unknown>[]) {
-            const k = key === 'user_id' ? 'u1' : String(row[key]);
+            const k = key === 'user_id' ? 'u1' : String(row['id']);
             const old = t.get(k);
             if (old && String(row.updated_at) < String(old.updated_at)) continue; // reject_stale_update
             t.set(k, { ...old, ...row, user_id: 'u1', synced_at: synced });
