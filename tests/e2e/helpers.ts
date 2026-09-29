@@ -57,7 +57,7 @@ export async function mockSupabase(page: Page): Promise<FakeBackend> {
         clock += 1000;
         const synced = new Date(clock).toISOString();
         for (const row of body as Record<string, unknown>[]) {
-          const k = key === 'user_id' ? 'u1' : String(row[key]);
+          const k = key === 'user_id' ? 'u1' : String(row['id']);
           t.set(k, { ...t.get(k), ...row, user_id: 'u1', synced_at: synced });
         }
         return route.fulfill({ status: 201, body: '', headers: { 'access-control-allow-origin': '*' } });

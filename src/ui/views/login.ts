@@ -46,6 +46,7 @@ export function renderLogin(ctx: AppContext): HTMLElement {
 
   root.appendChild(h('div', { class: 'card' },
     h('div', { class: 'small muted', style: 'margin-bottom:10px' }, 'パスワードはありません。メールアドレスを入れると、ログイン用のリンクがメールで届きます。'),
+    h('div', { class: 'small muted', style: 'margin-bottom:10px' }, '記録はこのアプリの管理者が用意した Supabase に保存されます。他の利用者からは見えませんが、管理者は閲覧できます。登録できるのは、管理者が許可したメールアドレスだけです。'),
     h('label', { class: 'field' }, h('span', null, 'メールアドレス'), emailInput),
     sendBtn,
     msg,
