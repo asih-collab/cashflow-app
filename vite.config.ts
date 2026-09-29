@@ -15,5 +15,6 @@ export default defineConfig(({ mode }) => ({
   test: {
     include: ['tests/unit/**/*.test.ts'],
     environment: 'node',
+    coverage: { provider: 'v8', include: ['src/**/*.ts'], reporter: ['text', 'json-summary'], reportsDirectory: 'coverage' },
   },
 }));

@@ -25,6 +25,8 @@ npm run typecheck      # 型チェック
 npm run test:unit      # vitest（tests/unit）。予算期間・集計・カテゴリ順・同期・ストア
 npm run test:e2e       # ビルド（--mode e2e。vite.config.ts のダミー接続先）→ Playwright（iPhone 14 のビューポート、Chromium）
 npm test               # 上 2 つ
+npm run test:coverage  # ユニットテストのカバレッジ（coverage/）
+npm run test:e2e:coverage  # 自動操作テストでブラウザが実際に動かした範囲（ソースマップで元の .ts に戻して集計。coverage-e2e/）
 npm run build          # 本番ビルド（dist/）。VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY を環境変数で渡す
 npm run icons          # アイコン PNG を作り直す（通常は不要）
 ```

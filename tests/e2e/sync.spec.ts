@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { loginViaCode, mockSupabase, openApp, tapDigits } from './helpers';
 
 test.describe('ログイン（F10）と同期', () => {

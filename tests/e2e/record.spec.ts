@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { openApp, tapDigits } from './helpers';
 
 test.describe('クイック記録（F01）とホーム（F02）', () => {
