@@ -71,4 +71,27 @@ describe('AppStore', () => {
     const json = JSON.parse(s.exportJson());
     expect(json.categories.some((x: { id: string }) => x.id === c.id)).toBe(true);
   });
+  it('以前から使っている端末にも、あとから増えた初期カテゴリ（収入）が足される', async () => {
+    const db = new Db(new IDBFactory(), 'old');
+    const s1 = new AppStore(db);
+    await s1.init();
+    // 収入カテゴリが無かった頃の状態を再現
+    for (const c of s1.categories.filter((c) => c.kind === 'income')) await db.delete('categories', c.id);
+    const s2 = new AppStore(db);
+    await s2.reload();
+    expect(s2.incomeCategories).toHaveLength(0);
+    await s2.init();
+    expect(s2.incomeCategories.map((c) => c.name)).toContain('給与');
+  });
+
+  it('収入は支払い手段を持たず、前回の支払い手段も変えない', async () => {
+    const s = await fresh('inc');
+    const paypay = s.paymentMethods.find((p) => p.name === 'PayPay')!;
+    await s.addTransaction({ amount: 100, categoryId: s.quickCategories[0]!.id, paymentMethodId: paypay.id });
+    const salary = s.incomeCategories.find((c) => c.name === '給与')!;
+    const t = await s.addTransaction({ amount: 300000, categoryId: salary.id, paymentMethodId: null, type: 'income' });
+    expect(t.type).toBe('income');
+    expect(t.payment_method_id).toBeNull();
+    expect(s.defaultPaymentMethodId).toBe(paypay.id);
+  });
 });

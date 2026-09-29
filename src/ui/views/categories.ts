@@ -27,7 +27,7 @@ export function renderCategories(ctx: AppContext): HTMLElement {
       await store.addSubcategory(p.id, name);
       ctx.navigate('/categories');
     } }, '＋ 追加')));
-    root.appendChild(h('h2', null, p.name, h('span', { class: 'muted small', style: 'font-weight:400' }, p.kind === 'fixed' ? '（固定費）' : p.kind === 'semi_fixed' ? '（準固定費）' : '')));
+    root.appendChild(h('h2', null, p.name, h('span', { class: 'muted small', style: 'font-weight:400' }, p.kind === 'fixed' ? '（固定費）' : p.kind === 'semi_fixed' ? '（準固定費）' : p.kind === 'income' ? '（収入）' : '')));
     root.appendChild(card);
   }
   return root;

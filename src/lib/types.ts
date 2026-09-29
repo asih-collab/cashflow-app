@@ -1,6 +1,6 @@
 // データモデル（06_データモデルと画面.md に対応）。金額は整数円。
 
-export type CategoryKind = 'variable' | 'semi_fixed' | 'fixed';
+export type CategoryKind = 'variable' | 'semi_fixed' | 'fixed' | 'income';
 
 export interface Category {
   id: string;
