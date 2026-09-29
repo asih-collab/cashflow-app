@@ -13,12 +13,16 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "npm run build:e2e && playwright test",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e:coverage": "vite build --mode e2e --sourcemap && node scripts/build-sw.mjs && COVERAGE=1 playwright test && node scripts/e2e-coverage.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
     "@types/node": "^22.20.4",
+    "@vitest/coverage-v8": "^4.1.11",
     "fake-indexeddb": "6.2.5",
+    "monocart-coverage-reports": "^2.13.0",
     "typescript": "5.9.3",
     "vite": "7.3.6",
     "vitest": "4.1.11"

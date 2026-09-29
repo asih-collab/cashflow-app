@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { openApp, tapDigits } from './helpers';
 
 test.describe('設定とカテゴリ管理（F04）', () => {
