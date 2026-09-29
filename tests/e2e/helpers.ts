@@ -77,8 +77,6 @@ export async function loginViaCode(page: Page): Promise<void> {
   await page.getByTestId('email').fill('me@example.com');
   await page.getByTestId('send-code').tap();
   await expect(page.getByTestId('step2')).toBeVisible();
-  await page.getByTestId('step2').locator('summary').tap();
   await page.getByTestId('code').fill('123456');
-  await page.getByTestId('verify-code').tap();
   await expect(page.getByTestId('home')).toBeVisible();
 }

@@ -6,6 +6,9 @@
   "mailer_autoconfirm": false,
   "mailer_otp_length": 6,
   "mailer_otp_exp": 3600,
-  "mailer_subjects_magic_link": "【家計】ログイン用コード: {{ .Token }}",
-  "mailer_templates_magic_link_content": "<h2>家計アプリのログイン</h2>\n<p>アプリに次のコードを入力してください（1 時間有効）。</p>\n<p style=\"font-size:32px;font-weight:bold;letter-spacing:6px\">{{ .Token }}</p>\n<p>Safari で開いている場合は、<a href=\"{{ .ConfirmationURL }}\">このリンクを押してもログインできます</a>。</p>\n<p style=\"color:#888;font-size:12px\">心当たりがない場合はこのメールを無視してください。</p>"
+  "mailer_subjects_magic_link": "ログイン用コード: {{ .Token }}",
+  "mailer_templates_magic_link_content": "<div style=\"font-family:-apple-system,'Hiragino Sans',sans-serif;max-width:420px;margin:0 auto;padding:24px;color:#17181c\">\n<p style=\"font-size:13px;letter-spacing:.12em;color:#74706a;margin:0\">CASHFLOW</p>\n<h2 style=\"font-weight:400;font-size:24px;margin:4px 0 16px\">ログイン用のコード</h2>\n<p>アプリの画面に、次の 6 桁の数字を入力してください（1 時間有効）。</p>\n<p style=\"font-size:36px;letter-spacing:10px;font-family:Georgia,serif;margin:20px 0;color:#244e43\">{{ .Token }}</p>\n<p style=\"font-size:13px;color:#74706a\">Safari で使っている場合は、<a href=\"{{ .ConfirmationURL }}\" style=\"color:#244e43\">こちらのリンク</a>を押してもログインできます。</p>\n<p style=\"font-size:12px;color:#9a958d;margin-top:24px\">心当たりがない場合は、このメールを無視してください。</p>\n</div>",
+  "mailer_subjects_confirmation": "ログイン用コード: {{ .Token }}",
+  "mailer_templates_confirmation_content": "<div style=\"font-family:-apple-system,'Hiragino Sans',sans-serif;max-width:420px;margin:0 auto;padding:24px;color:#17181c\">\n<p style=\"font-size:13px;letter-spacing:.12em;color:#74706a;margin:0\">CASHFLOW</p>\n<h2 style=\"font-weight:400;font-size:24px;margin:4px 0 16px\">ログイン用のコード</h2>\n<p>アプリの画面に、次の 6 桁の数字を入力してください（1 時間有効）。</p>\n<p style=\"font-size:36px;letter-spacing:10px;font-family:Georgia,serif;margin:20px 0;color:#244e43\">{{ .Token }}</p>\n<p style=\"font-size:13px;color:#74706a\">Safari で使っている場合は、<a href=\"{{ .ConfirmationURL }}\" style=\"color:#244e43\">こちらのリンク</a>を押してもログインできます。</p>\n<p style=\"font-size:12px;color:#9a958d;margin-top:24px\">心当たりがない場合は、このメールを無視してください。</p>\n</div>",
+  "rate_limit_email_sent": 30
 }
