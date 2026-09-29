@@ -7,7 +7,6 @@ import type { AppContext } from '../context';
 import { SupabaseError } from '../../lib/supabase';
 import { toast } from '../toast';
 import { decodeHandoff } from '../../lib/handoff';
-import { isIOS, isStandalone } from '../install';
 
 const EMAIL_KEY = 'cf.loginEmail';
 
@@ -25,27 +24,30 @@ export function renderLogin(ctx: AppContext): HTMLElement {
   const sendBtn = h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'send-code' }, 'ログイン用のメールを送る');
   const msg = h('div', { class: 'small muted', style: 'margin-top:8px', 'data-testid': 'login-message' });
 
-  const standalone = isIOS() && isStandalone();
   const pasteInput = h('textarea', { class: 'input', rows: '2', placeholder: 'cf1. で始まる文字列', style: 'font-size:13px', 'data-testid': 'handoff-input', autocomplete: 'off' });
-  const pasteBtn = h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'handoff-login' }, '貼り付けてログイン');
+  const pasteBtn = h('button', { class: 'btn big', type: 'button', 'data-testid': 'handoff-login' }, '貼り付けてログイン');
   const codeInput = h('input', { class: 'input code-input', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: '000000', maxlength: '8', 'data-testid': 'code' });
-  const verifyBtn = h('button', { class: 'btn big', type: 'button', 'data-testid': 'verify-code' }, 'コードでログイン');
+  const verifyBtn = h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'verify-code' }, 'ログイン');
   const step2 = h('div', { class: 'card', style: 'display:none', 'data-testid': 'step2' },
-    h('div', null, h('b', null, 'メールが届いたら、中のリンクを押してください。')),
-    standalone
-      ? h('div', { class: 'muted small', style: 'margin:4px 0 10px' }, 'リンクは Safari で開きます。そこに出る「ログイン情報をコピー」を押してから、このアプリに戻って下の欄に貼り付けてください。')
-      : h('div', { class: 'muted small', style: 'margin:4px 0 10px' }, 'リンクを押すとそのままログインできます。届かないときは迷惑メールも確認してください。'),
-    h('label', { class: 'field' }, h('span', null, 'Safari でコピーしたログイン情報'), pasteInput),
-    pasteBtn,
-    h('details', { style: 'margin-top:12px' },
-      h('summary', { class: 'small muted' }, 'メールにコードが書かれている場合'),
-      h('label', { class: 'field', style: 'margin-top:8px' }, h('span', null, 'コード'), codeInput),
-      verifyBtn,
+    h('div', null, h('b', null, 'メールに書かれた 6 桁の数字を入力してください。')),
+    h('div', { class: 'muted small', style: 'margin:4px 0 10px' }, '件名は「ログイン用コード」です。届かないときは迷惑メールも確認してください。'),
+    h('label', { class: 'field' }, h('span', null, 'コード'), codeInput),
+    verifyBtn,
+    h('details', { style: 'margin-top:14px' },
+      h('summary', { class: 'small muted' }, 'メールのリンクを Safari で開いた場合'),
+      h('div', { class: 'muted small', style: 'margin:8px 0' }, 'Safari に出た「ログイン情報をコピー」を押してから、ここに貼り付けてください。'),
+      h('label', { class: 'field' }, h('span', null, 'コピーしたログイン情報'), pasteInput),
+      pasteBtn,
     ),
   );
+  // 6 桁そろったら自動でログイン
+  codeInput.addEventListener('input', () => {
+    const v = codeInput.value.replace(/\D/g, '');
+    if (v.length === 6 && !verifyBtn.disabled) verifyBtn.click();
+  });
 
   root.appendChild(h('div', { class: 'card' },
-    h('div', { class: 'small muted', style: 'margin-bottom:10px' }, 'パスワードはありません。メールアドレスを入れると、ログイン用のリンクがメールで届きます。'),
+    h('div', { class: 'small muted', style: 'margin-bottom:10px' }, 'パスワードはありません。メールアドレスを入れると、ログイン用の 6 桁のコードがメールで届きます。'),
     h('div', { class: 'small muted', style: 'margin-bottom:10px' }, '記録はこのアプリの管理者が用意した Supabase に保存されます。他の利用者からは見えませんが、管理者は閲覧できます。登録できるのは、管理者が許可したメールアドレスだけです。'),
     h('label', { class: 'field' }, h('span', null, 'メールアドレス'), emailInput),
     sendBtn,

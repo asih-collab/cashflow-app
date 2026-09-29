@@ -25,9 +25,7 @@ test.describe('ログイン（F10）と同期', () => {
     await openApp(page, '#/login');
     await page.getByTestId('email').fill('me@example.com');
     await page.getByTestId('send-code').tap();
-    await page.getByTestId('step2').locator('summary').tap();
     await page.getByTestId('code').fill('999999');
-    await page.getByTestId('verify-code').tap();
     await expect(page.getByTestId('login-message')).toContainText('コードが違うか、期限切れです');
   });
 
@@ -81,6 +79,7 @@ test.describe('ログイン（F10）と同期', () => {
     await p2.goto('./#/login');
     await p2.getByTestId('email').fill('me@example.com');
     await p2.getByTestId('send-code').tap();
+    await p2.getByTestId('step2').locator('summary').tap();
     await p2.getByTestId('handoff-input').fill(copied);
     await p2.getByTestId('handoff-login').tap();
     await expect(p2.getByTestId('home')).toBeVisible();
@@ -101,6 +100,7 @@ test.describe('ログイン（F10）と同期', () => {
     await openApp(page, '#/login');
     await page.getByTestId('email').fill('me@example.com');
     await page.getByTestId('send-code').tap();
+    await page.getByTestId('step2').locator('summary').tap();
     await page.getByTestId('handoff-input').fill('てきとう');
     await page.getByTestId('handoff-login').tap();
     await expect(page.getByTestId('login-message')).toContainText('違うようです');

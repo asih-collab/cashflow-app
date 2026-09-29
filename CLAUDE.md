@@ -45,7 +45,7 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 
 - 反映手順とスキーマの説明は `supabase/README.md`
 - Management API は `api.supabase.com`。プロジェクトの `*.supabase.co` には Claude のクラウド環境から直接つなげない（テストはフェイクで行う）
-- Auth はメールのマジックリンク。無料プラン + 標準メール送信ではメール文面を変えられず 6 桁コードを載せられない。ホーム画面に追加した PWA は Safari と保存領域が別なので、Safari 着地時に `#/handoff` で「ログイン情報をコピー」→ PWA の `#/login` で貼り付け（`src/lib/handoff.ts`）。コード入力欄は文面にコードがある場合（独自 SMTP 設定時）用
+- Auth はメールの 6 桁コード（Brevo の SMTP 経由、文面は `supabase/auth-config.json`）。ログイン画面は 6 桁そろうと自動で検証。メールのリンクを Safari で開いた場合は `#/handoff` で「ログイン情報をコピー」→ PWA のログイン画面で貼り付け（`src/lib/handoff.ts`）
 - 新規登録は `private.allowed_emails` にあるメールだけ（管理者が追加）。利用者を増やす手順と独自 SMTP の設定は `supabase/README.md`
 
 ## デザイン
