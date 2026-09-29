@@ -9,8 +9,9 @@ export const ONBOARDED_KEY = 'cf.onboarded';
 
 export function showOnboarding(ctx: AppContext): void {
   const cover = h('div', { class: 'cover' },
-    artworkElement('moss', 42),
-    h('div', { class: 'eyebrow' }, 'Cashflow'),
+    artworkElement('ember', 42),
+    h('div', { class: 'eyebrow', style: 'margin-bottom:10px' }, 'Personal ledger'),
+    h('div', { class: 'wordmark' }, 'Cash', h('br'), 'flow', h('span', null, '.')),
     h('h1', null, 'ようこそ'),
   );
   const box = h('div', { class: 'box' },
