@@ -1,12 +1,13 @@
 // シックなアートワーク（SVG）。写真の代わりに、色面と粒子（グレイン）で落ち着いた画像を生成する。
 // 外部の画像サービスに頼らず、オフラインでも同じ絵が出る。
 
-export type ArtVariant = 'dusk' | 'moss' | 'ink';
+export type ArtVariant = 'dusk' | 'moss' | 'ink' | 'ember';
 
 const PALETTES: Record<ArtVariant, { base: string; a: string; b: string; c: string }> = {
   dusk: { base: '#1E2430', a: '#B9673F', b: '#E7C39A', c: '#3E5A6E' },
   moss: { base: '#1C2E28', a: '#5E8C6A', b: '#D9C89B', c: '#284A3E' },
   ink: { base: '#141519', a: '#4B4E5C', b: '#A79C86', c: '#2A2D38' },
+  ember: { base: '#0A0A0B', a: '#FF5B24', b: '#7A2A12', c: '#1C1C20' },
 };
 
 /** 疑似乱数（同じ seed なら同じ絵） */

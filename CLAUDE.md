@@ -52,10 +52,10 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 
 ## デザイン
 
-- 方向性はエディトリアル調（`docs/決定記録.md` 参照）。色・角丸・影などは `src/app.css` の `:root` の CSS 変数で管理し、ダークモードは `prefers-color-scheme` で切り替える
-- 数字は `.num` / `.amount`（Instrument Serif、`public/fonts/`）。見出し `h1` はセリフ、本文はシステムのゴシック
-- アートワークは `src/ui/art.ts`（SVG 生成。`variant` と `seed` で絵が変わる）、アイコンは `src/ui/icons.ts`
-- 画面を変えたら iPhone サイズのスクリーンショットで確認する（Playwright の `devices['iPhone 14']`、`colorScheme: 'dark'` も）
+- 方向性は「Night Ledger」（`docs/決定記録.md` 参照）。常にダーク、アクセントは朱色 1 色。色・角丸などは `src/app.css` の `:root` の CSS 変数で管理
+- 数字は `.num` / `.amount` / `.big`（Anton）、ラベルは `.mono` / `h2`（JetBrains Mono、大文字）、日本語はヒラギノ角ゴの太字。フォントは `public/fonts/`
+- アートワークは `src/ui/art.ts`（SVG 生成。ホームと初回画面は `ember`）、アイコンは `src/ui/icons.ts`
+- 画面を変えたら iPhone 14 と iPhone SE のスクリーンショットで確認する（記録画面の保存ボタンがタブに隠れないこと）
 
 ## 設計上の決まり
 

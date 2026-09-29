@@ -24,7 +24,7 @@ test.describe('設定とカテゴリ管理（F04）', () => {
     await openApp(page, '#/settings');
     await page.getByTestId('month-start-day').selectOption('25');
     await page.goto('./#/');
-    await expect(page.locator('h1')).toContainText('〜');
+    await expect(page.getByTestId('period-label')).toContainText('〜');
   });
 
   test('開いたときの画面をホームにできる', async ({ page }) => {
