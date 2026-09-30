@@ -69,3 +69,45 @@ export function perDaySoFar(total: number, period: Period): number {
   const elapsed = period.totalDays - period.daysLeft + 1;
   return elapsed > 0 ? Math.round(total / elapsed) : 0;
 }
+
+export interface DailyTotal {
+  /** YYYY-MM-DD */
+  date: string;
+  /** その日の変動費の合計 */
+  amount: number;
+  /** その日の変動費の件数 */
+  count: number;
+}
+
+/** 予算期間の各日について、変動費の合計を返す（記録のない日は 0）。ホームの日別グラフ用 */
+export function dailyTotals(transactions: Transaction[], categories: Category[], period: Period): DailyTotal[] {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const days: DailyTotal[] = [];
+  const index = new Map<string, DailyTotal>();
+  const [y, m, d] = period.start.split('-').map(Number);
+  for (let i = 0; i < period.totalDays; i++) {
+    const dt = new Date(y!, m! - 1, d! + i);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const row = { date: key, amount: 0, count: 0 };
+    days.push(row);
+    index.set(key, row);
+  }
+  for (const t of transactions) {
+    if (t.deleted_at || t.type !== 'expense') continue;
+    const row = index.get(t.date);
+    if (!row) continue;
+    const kind = (t.category_id ? byId.get(t.category_id)?.kind : undefined) ?? 'variable';
+    if (kind !== 'variable') continue;
+    row.amount += t.amount;
+    row.count += 1;
+  }
+  return days;
+}
+
+/** 軸の上端に使う、切りのよい値（1, 2, 5 × 10^n） */
+export function niceCeil(v: number): number {
+  if (v <= 0) return 1000;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}

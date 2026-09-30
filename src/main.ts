@@ -100,6 +100,7 @@ async function boot(): Promise<void> {
     let el: HTMLElement;
     switch (route.path) {
       case '/add': el = renderAdd(ctx, route); break;
+      case '/edit': el = renderAdd(ctx, route); break;
       case '/settings': el = renderSettings(ctx); break;
       case '/categories': el = renderCategories(ctx); break;
       case '/login': el = renderLogin(ctx); break;
@@ -115,7 +116,7 @@ async function boot(): Promise<void> {
   window.addEventListener('hashchange', render);
   // データや同期状態が変わったら、入力中でない画面だけ描き直す
   const rerenderIfIdle = () => {
-    if (ctx.route?.path === '/add' || ctx.route?.path === '/login' || ctx.route?.path === '/handoff') return;
+    if (ctx.route?.path === '/add' || ctx.route?.path === '/edit' || ctx.route?.path === '/login' || ctx.route?.path === '/handoff') return;
     render();
   };
   store.subscribe(rerenderIfIdle);

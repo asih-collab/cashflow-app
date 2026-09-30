@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { seedCategories } from '../../src/lib/categories';
 import { periodFor } from '../../src/lib/period';
-import { statsFor, perDaySoFar } from '../../src/lib/stats';
+import { statsFor, perDaySoFar, dailyTotals, niceCeil } from '../../src/lib/stats';
 import type { Transaction } from '../../src/lib/types';
 
 const cats = seedCategories('2026-09-01T00:00:00.000Z');
@@ -64,5 +64,40 @@ describe('statsFor', () => {
     expect(s.incomeTotal).toBe(3000);
     expect(s.expenseCount).toBe(0);
     expect(s.variableTotal).toBe(0);
+  });
+});
+
+describe('dailyTotals / niceCeil', () => {
+  const period = periodFor(new Date(2026, 8, 28), 1); // 9 月（30 日）
+  it('期間の全日を返し、変動費だけを日ごとに合計する', () => {
+    const d = dailyTotals([
+      tx('2026-09-01', 1200, 'デート'),
+      tx('2026-09-01', 800, '外食'),
+      tx('2026-09-03', 500, 'コンビニ'),
+      tx('2026-09-03', 130000, '家賃'), // 固定費は入れない
+      tx('2026-09-03', 300000, '給与', { type: 'income' }), // 収入は入れない
+      tx('2026-09-04', 999, 'カフェ', { deleted_at: '2026-09-05T00:00:00.000Z' }), // 削除済み
+      tx('2026-10-01', 700, '外食'), // 期間外
+    ], cats, period);
+    expect(d).toHaveLength(30);
+    expect(d[0]).toEqual({ date: '2026-09-01', amount: 2000, count: 2 });
+    expect(d[2]).toEqual({ date: '2026-09-03', amount: 500, count: 1 });
+    expect(d[3]!.amount).toBe(0);
+    expect(d[29]!.date).toBe('2026-09-30');
+  });
+  it('給料日基準の期間（月をまたぐ）でも日付が正しく並ぶ', () => {
+    const p = periodFor(new Date(2027, 0, 3), 25); // 12/25〜1/24
+    const d = dailyTotals([tx('2027-01-01', 3000, '外食')], cats, p);
+    expect(d[0]!.date).toBe('2026-12-25');
+    expect(d[7]).toEqual({ date: '2027-01-01', amount: 3000, count: 1 });
+    expect(d[d.length - 1]!.date).toBe('2027-01-24');
+  });
+  it('niceCeil は切りのよい上端を返す', () => {
+    expect(niceCeil(0)).toBe(1000);
+    expect(niceCeil(830)).toBe(1000);
+    expect(niceCeil(12400)).toBe(20000);
+    expect(niceCeil(3200)).toBe(5000);
+    expect(niceCeil(2400)).toBe(2500);
+    expect(niceCeil(50000)).toBe(50000);
   });
 });

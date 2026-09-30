@@ -1,7 +1,9 @@
 import { h } from '../dom';
 import { yen } from '../../lib/money';
 import { periodFor } from '../../lib/period';
-import { statsFor, perDaySoFar } from '../../lib/stats';
+import { statsFor, perDaySoFar, dailyTotals } from '../../lib/stats';
+import { renderDailyChart } from '../dailyChart';
+import { toDateString } from '../../lib/period';
 import { categoryById } from '../../lib/categories';
 import type { AppContext } from '../context';
 import { toast } from '../toast';
@@ -11,6 +13,9 @@ import { artworkElement } from '../art';
 import { icon } from '../icons';
 
 const INSTALL_DISMISSED_KEY = 'cf.installHintDismissed';
+const WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+/** 日別グラフで選んでいる日（画面を描き直しても保つ） */
+let selectedDay: string | null = null;
 
 export function renderHome(ctx: AppContext): HTMLElement {
   const { store } = ctx;
@@ -56,6 +61,10 @@ export function renderHome(ctx: AppContext): HTMLElement {
     ),
   );
 
+  // 日別
+  root.appendChild(h('h2', null, '日別 / Daily'));
+  root.appendChild(renderDaily(ctx, period));
+
   // 内訳
   const breakdown = h('div', { class: 'card tight', 'data-testid': 'breakdown' });
   if (stats.variableBreakdown.length === 0) {
@@ -99,7 +108,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
       const pm = store.paymentMethods.find((p) => p.id === t.payment_method_id);
       list.appendChild(
         h('div', { class: 'list-item', 'data-testid': 'recent-row' },
-          h('div', { class: 'grow' },
+          h('a', { class: 'grow row-link', href: `#/edit?id=${t.id}`, 'data-testid': 'edit-link', 'aria-label': `${cat?.name ?? '記録'} ${yen(t.amount)} を修正` },
             h('div', null, cat?.name ?? '未分類', t.memo ? h('span', { class: 'muted small' }, ` ${t.memo}`) : null),
             h('div', { class: 'recent-meta' }, `${t.date.slice(5).replace('-', '/')}${pm ? ' · ' + pm.name : ''}`),
           ),
@@ -145,4 +154,57 @@ export function renderHome(ctx: AppContext): HTMLElement {
   }
 
   return root;
+}
+
+function renderDaily(ctx: AppContext, period: ReturnType<typeof periodFor>): HTMLElement {
+  const { store } = ctx;
+  const today = toDateString(new Date());
+  const days = dailyTotals(store.transactions, store.categories, period);
+  if (!selectedDay || !days.some((d) => d.date === selectedDay) || selectedDay > today) {
+    selectedDay = days.some((d) => d.date === today) ? today : days[days.length - 1]?.date ?? null;
+  }
+  const card = h('div', { class: 'card daily-card', 'data-testid': 'daily' });
+  const chartHost = h('div');
+  const readout = h('div');
+  card.append(chartHost, readout);
+
+  const variableIds = new Set(store.categories.filter((c) => c.kind === 'variable').map((c) => c.id));
+  const draw = () => {
+    chartHost.replaceChildren(renderDailyChart({ days, today, selected: selectedDay, onSelect: (d) => { selectedDay = d; draw(); } }));
+    const d = days.find((x) => x.date === selectedDay);
+    if (!d) { readout.replaceChildren(); return; }
+    const dt = new Date(Number(d.date.slice(0, 4)), Number(d.date.slice(5, 7)) - 1, Number(d.date.slice(8)));
+    const items = store.liveTransactions
+      .filter((t) => t.date === d.date && t.type === 'expense' && (t.category_id === null || variableIds.has(t.category_id)))
+      .sort((a, b) => b.amount - a.amount);
+    readout.replaceChildren(
+      h('div', { class: 'day-readout', 'data-testid': 'day-readout' },
+        h('span', { class: 'when' }, `${d.date.slice(5).replace('-', '/')} ${WEEK[dt.getDay()]}${d.date === today ? ' · 今日' : ''}`),
+        h('span', { class: 'amt', 'data-testid': 'day-total' }, yen(d.amount)),
+      ),
+      items.length === 0
+        ? h('div', { class: 'muted small', style: 'padding:6px 0 2px' }, 'この日の変動費の記録はありません。')
+        : h('div', { class: 'day-items' }, items.map((t) =>
+            h('a', { class: 'list-item row-link', href: `#/edit?id=${t.id}`, 'data-testid': 'day-item' },
+              h('span', { class: 'grow' }, categoryById(store.categories, t.category_id)?.name ?? '未分類', t.memo ? h('span', { class: 'muted small' }, ` ${t.memo}`) : null),
+              h('span', { class: 'amount', style: 'font-size:18px' }, yen(t.amount)),
+              icon('chevron'),
+            ))),
+    );
+  };
+  draw();
+
+  // 表で見る（グラフの代わりに数字で確認できるように）
+  const rows = days.filter((d) => d.amount > 0).reverse();
+  if (rows.length > 0) {
+    card.appendChild(h('details', { class: 'day-table', 'data-testid': 'day-table' },
+      h('summary', null, '一覧で見る / Table'),
+      rows.map((d) => h('div', { class: 'list-item', style: 'padding:8px 0;min-height:36px' },
+        h('span', { class: 'mono grow', style: 'color:var(--ink-2)' }, d.date.slice(5).replace('-', '/')),
+        h('span', { class: 'muted small', style: 'margin-right:12px' }, `${d.count} 件`),
+        h('span', { class: 'amount', style: 'font-size:17px' }, yen(d.amount)),
+      )),
+    ));
+  }
+  return card;
 }

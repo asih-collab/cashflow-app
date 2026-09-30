@@ -16,16 +16,23 @@ const QUICK_COUNT = 8;
 
 export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   const { store } = ctx;
-  let digits = route.params.get('amount')?.replace(/\D/g, '').slice(0, MAX_DIGITS) ?? '';
-  let mode: 'expense' | 'income' = route.params.get('type') === 'income' ? 'income' : 'expense';
+  // 修正モード（#/edit?id=...）: 既存の記録を読み込んで同じ画面で直す
+  const editing = route.path === '/edit' ? store.liveTransactions.find((t) => t.id === route.params.get('id')) : undefined;
+  if (route.path === '/edit' && !editing) {
+    return h('div', { 'data-testid': 'edit-missing' }, h('h1', null, '記録が見つかりません'), h('p', { class: 'muted' }, '削除されたか、別の端末でまだ同期されていない可能性があります。'), h('a', { class: 'btn big', href: '#/' }, 'ホームへ'));
+  }
+  let digits = editing ? String(editing.amount) : route.params.get('amount')?.replace(/\D/g, '').slice(0, MAX_DIGITS) ?? '';
+  let mode: 'expense' | 'income' = editing ? editing.type : route.params.get('type') === 'income' ? 'income' : 'expense';
   const list = () => (mode === 'income' ? store.incomeCategories : store.quickCategories);
   const catParam = route.params.get('cat');
   let selected: Category | null = catParam
     ? [...store.quickCategories, ...store.incomeCategories].find((c) => c.name === catParam) ?? null
     : null;
+  if (editing) selected = store.categories.find((c) => c.id === editing.category_id) ?? null;
   if (selected?.kind === 'income') mode = 'income';
-  let extraSelected: Category | null = null; // 「その他…」から選んだもの（上位に無い場合）
+  let extraSelected: Category | null = editing ? selected : null; // 「その他…」から選んだもの（上位に無い場合）
   let saving = false;
+  let freshEdit = !!editing;
 
   const period = periodFor(new Date(), store.settings.month_start_day);
   const stats = statsFor(store.transactions, store.categories, period);
@@ -35,7 +42,9 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   root.appendChild(
     h('div', { class: 'top' },
       h('a', { href: '#/', 'data-testid': 'to-home', style: 'text-decoration:none' }, icon('back'), `${period.label} `, h('span', { class: 'num' }, yen(stats.variableTotal))),
-      h('span', null, `${toDateString(new Date()).slice(5).replace('-', '/')} 今日`),
+      editing
+        ? h('button', { type: 'button', class: 'btn sm danger', 'data-testid': 'edit-delete', onClick: () => void remove() }, icon('trash'), '削除')
+        : h('span', null, `${toDateString(new Date()).slice(5).replace('-', '/')} 今日`),
     ),
   );
 
@@ -50,12 +59,12 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   root.appendChild(cats);
 
   // 詳細（日付・支払い手段・メモ）は折りたたみ
-  const dateInput = h('input', { class: 'input', type: 'date', value: toDateString(new Date()), 'data-testid': 'date' });
+  const dateInput = h('input', { class: 'input', type: 'date', value: editing?.date ?? toDateString(new Date()), 'data-testid': 'date' });
   const pmSelect = h('select', { class: 'input', 'data-testid': 'payment-method' });
   for (const p of store.activePaymentMethods) {
-    pmSelect.appendChild(h('option', { value: p.id, selected: p.id === store.defaultPaymentMethodId }, p.name));
+    pmSelect.appendChild(h('option', { value: p.id, selected: p.id === (editing ? editing.payment_method_id : store.defaultPaymentMethodId) }, p.name));
   }
-  const memoInput = h('input', { class: 'input', type: 'text', placeholder: 'メモ（任意）', 'data-testid': 'memo', autocomplete: 'off' });
+  const memoInput = h('input', { class: 'input', type: 'text', placeholder: 'メモ（任意）', 'data-testid': 'memo', autocomplete: 'off', value: editing?.memo ?? '' });
   const summary = h('summary', null, '詳細（日付・支払い手段・メモ）');
   const details = h('details', { class: 'details' },
     summary,
@@ -84,6 +93,9 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   }
 
   function press(k: string): void {
+    // 修正モードでは、最初に数字を押したら金額を入れ直す（後ろに足さない）
+    if (freshEdit && k !== '⌫') digits = '';
+    freshEdit = false;
     if (k === '⌫') digits = digits.slice(0, -1);
     else if (digits.length < MAX_DIGITS) {
       const next = digits === '' && (k === '0' || k === '00') ? '' : digits + k;
@@ -113,7 +125,7 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     selected = c;
     renderCats();
     update();
-    if (store.settings.save_on_category_tap && amount() > 0) void save();
+    if (!editing && store.settings.save_on_category_tap && amount() > 0) void save();
   }
 
   function openAll(): void {
@@ -153,7 +165,16 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     display.replaceChildren(h('span', { class: 'yen' }, '¥'), a > 0 ? group(a) : '0');
     display.classList.toggle('empty', a === 0);
     saveBtn.disabled = saving || a <= 0 || !selected;
-    saveBtn.textContent = selected && a > 0 ? `${selected.name} ${mode === 'income' ? '+' : ''}${yen(a)} を保存` : mode === 'income' ? '収入を保存' : '保存';
+    const verb = editing ? 'に更新' : 'を保存';
+    saveBtn.textContent = selected && a > 0 ? `${selected.name} ${mode === 'income' ? '+' : ''}${yen(a)} ${verb}` : editing ? '更新' : mode === 'income' ? '収入を保存' : '保存';
+  }
+
+  async function remove(): Promise<void> {
+    if (!editing) return;
+    await store.deleteTransaction(editing.id);
+    ctx.busy.entering = false;
+    toast(`${selected?.name ?? '記録'} ${yen(editing.amount)} を削除しました`, { actionLabel: '元に戻す', onAction: () => void store.restoreTransaction(editing.id) });
+    history.length > 1 ? history.back() : ctx.navigate('/');
   }
 
   async function save(): Promise<void> {
@@ -161,6 +182,21 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     if (saving || a <= 0 || !selected) return;
     saving = true;
     update();
+    if (editing) {
+      const before = { amount: editing.amount, category_id: editing.category_id, date: editing.date, payment_method_id: editing.payment_method_id, memo: editing.memo, type: editing.type };
+      await store.updateTransaction(editing.id, {
+        amount: a,
+        category_id: selected.id,
+        date: dateInput.value || editing.date,
+        payment_method_id: mode === 'income' ? null : pmSelect.value || null,
+        memo: memoInput.value.trim(),
+        type: mode,
+      });
+      ctx.busy.entering = false;
+      toast(`${selected.name} ${mode === 'income' ? '+' : ''}${yen(a)} に更新しました`, { actionLabel: '元に戻す', durationMs: 5000, onAction: () => void store.updateTransaction(editing.id, before) });
+      history.length > 1 ? history.back() : ctx.navigate('/');
+      return;
+    }
     const t = await store.addTransaction({
       amount: a,
       categoryId: selected.id,
@@ -188,5 +224,11 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   }
 
   setMode(mode);
+  if (editing) {
+    root.classList.add('editing');
+    ctx.busy.entering = true;
+    const pmName = store.paymentMethods.find((p) => p.id === editing.payment_method_id)?.name;
+    summary.textContent = `詳細（${editing.date.slice(5).replace('-', '/')}${pmName && mode === 'expense' ? '・' + pmName : ''}${editing.memo ? '・' + editing.memo : ''}）`;
+  }
   return root;
 }

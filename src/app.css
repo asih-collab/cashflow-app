@@ -207,3 +207,34 @@ input[type=date].input { color-scheme: dark; }
 .add-view.income .cat.selected { background: var(--good); border-color: var(--good); color: var(--accent-ink); }
 .add-view.income .save.primary { background: var(--good); }
 .is-income { color: var(--good) !important; }
+
+/* ---- 日別グラフ ---- */
+:root { --chart: #f2531d; }
+.daily-card { padding: 16px 16px 12px; }
+.daily-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.daily-chart .grid, .daily-chart .axis { stroke: var(--line-strong); stroke-width: 1; shape-rendering: crispEdges; }
+.daily-chart .grid { stroke: var(--line); }
+.daily-chart .bar { fill: var(--chart); transition: fill .12s; }
+.daily-chart .bar.on { fill: #ff8a5c; }
+.daily-chart .zero { fill: var(--faint); }
+.daily-chart .avg { stroke: var(--ink-2); stroke-width: 1; opacity: .55; shape-rendering: crispEdges; }
+.daily-chart .tick { font-family: var(--mono); font-size: 9px; letter-spacing: .08em; fill: var(--muted); }
+.daily-chart .avg-label { fill: var(--ink-2); }
+.daily-chart .today { fill: var(--ink); }
+.daily-chart .peak { font-family: var(--display); font-size: 12px; fill: var(--ink); letter-spacing: .02em; }
+.daily-chart .hit { fill: transparent; cursor: pointer; outline: none; }
+.daily-chart .hit:focus-visible { fill: rgba(243,240,233,.06); }
+.day-readout { display: flex; align-items: baseline; justify-content: space-between; margin: 14px 0 2px; padding-top: 12px; border-top: 1px solid var(--line); }
+.day-readout .when { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--ink-2); text-transform: uppercase; }
+.day-readout .amt { font-family: var(--display); font-size: 30px; line-height: 1; }
+.day-items .list-item { padding: 10px 0; min-height: 40px; }
+.day-table summary { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; color: var(--muted); padding: 10px 0 2px; list-style: none; cursor: pointer; text-transform: uppercase; }
+.day-table summary::-webkit-details-marker { display: none; }
+.day-table summary::before { content: "+ "; color: var(--accent); }
+.day-table[open] summary::before { content: "− "; }
+
+/* ---- 修正 ---- */
+.row-link { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 10px; }
+a.row-link.grow { flex-direction: column; align-items: stretch; gap: 0; }
+.row-link .ico { color: var(--faint); }
+.add-view.editing .segmented::after { content: "EDIT"; font-family: var(--mono); font-size: 10px; letter-spacing: .16em; color: var(--accent); align-self: center; padding: 0 10px; }
