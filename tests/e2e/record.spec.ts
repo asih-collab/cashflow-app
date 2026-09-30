@@ -149,4 +149,91 @@ test.describe('クイック記録（F01）とホーム（F02）', () => {
     await page.getByTestId('mode-expense').tap();
     await expect(page.getByTestId('cat-デート')).toHaveAttribute('aria-pressed', 'false');
   });
+
+  test('日別グラフ: 今日の合計が出て、別の日を押すとその日の明細に切り替わる', async ({ page }) => {
+    await openApp(page, '#/add');
+    await tapDigits(page, '1200');
+    await page.getByTestId('cat-デート').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    // 過去の日付で 1 件
+    await page.goto('./#/add');
+    await expect(page.getByTestId('cat-デート')).toBeVisible();
+    await tapDigits(page, '800');
+    await page.getByTestId('cat-外食').tap();
+    const past = await page.evaluate(() => {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+    await page.locator('details summary').tap();
+    await page.getByTestId('date').fill(past);
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+
+    await expect(page.getByTestId('daily')).toBeVisible();
+    await expect(page.getByTestId('day-readout')).toContainText('今日');
+    await expect(page.getByTestId('day-total')).toHaveText('¥1,200');
+    const hit = page.getByTestId(`day-${past}`);
+    if (await hit.count()) {
+      // 前日が同じ期間内なら、押すと前日の明細になる
+      await hit.dispatchEvent('click');
+      await expect(page.getByTestId('day-total')).toHaveText('¥800');
+      await expect(page.getByTestId('daily')).toContainText('外食');
+    }
+    // 表でも確認できる
+    await page.getByTestId('day-table').locator('summary').tap();
+    await expect(page.getByTestId('day-table')).toContainText('¥1,200');
+  });
+
+  test('記録の修正: 最近の記録から開いて金額とカテゴリを直し、元に戻す／削除もできる', async ({ page }) => {
+    await openApp(page, '#/add');
+    await tapDigits(page, '1200');
+    await page.getByTestId('cat-デート').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥1,200');
+
+    // 修正画面を開く
+    await page.getByTestId('edit-link').first().tap();
+    await expect(page.getByTestId('amount')).toHaveText('¥1,200');
+    await expect(page.getByTestId('cat-デート')).toHaveAttribute('aria-pressed', 'true');
+    // 最初の数字は入れ替え
+    await tapDigits(page, '980');
+    await expect(page.getByTestId('amount')).toHaveText('¥980');
+    await page.getByTestId('cat-カフェ').tap();
+    await page.locator('details summary').tap();
+    await page.getByTestId('memo').fill('ラテ');
+    await expect(page.getByTestId('save')).toHaveText('カフェ ¥980 に更新');
+    await page.getByTestId('save').tap();
+
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥980');
+    await expect(page.getByTestId('recent-row').first()).toContainText('カフェ');
+    await expect(page.getByTestId('recent-row').first()).toContainText('ラテ');
+    await expect(page.getByTestId('recent')).not.toContainText('デート');
+
+    // 元に戻す
+    await page.getByTestId('toast').getByRole('button', { name: '元に戻す' }).tap();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥1,200');
+
+    // 日別の明細から開いて削除
+    await page.getByTestId('day-item').first().tap();
+    await page.getByTestId('edit-delete').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥0');
+  });
+
+  test('支出を収入に直すこともできる', async ({ page }) => {
+    await openApp(page, '#/add');
+    await tapDigits(page, '5000');
+    await page.getByTestId('cat-外食').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await page.getByTestId('edit-link').first().tap();
+    await page.getByTestId('mode-income').tap();
+    await page.getByTestId('cat-臨時収入').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥0');
+    await expect(page.getByTestId('income-total')).toHaveText('+¥5,000');
+  });
 });

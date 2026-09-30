@@ -166,6 +166,26 @@ export class AppStore {
     return t;
   }
 
+  /** 記録を修正する。カテゴリが変わったら使用回数も付け替える。前回の支払い手段は変えない */
+  async updateTransaction(id: string, patch: Partial<Pick<Transaction, 'amount' | 'category_id' | 'date' | 'payment_method_id' | 'memo' | 'type'>>): Promise<Transaction | undefined> {
+    const t = this.transactions.find((x) => x.id === id);
+    if (!t || t.deleted_at) return undefined;
+    const now = nowIso();
+    const oldCat = t.category_id;
+    if (patch.amount !== undefined) patch.amount = Math.max(0, Math.trunc(patch.amount));
+    Object.assign(t, patch, { updated_at: now });
+    await this.save('transactions', t);
+    if (patch.category_id !== undefined && patch.category_id !== oldCat) {
+      const before = oldCat ? this.categories.find((x) => x.id === oldCat) : undefined;
+      if (before && before.use_count > 0) { before.use_count -= 1; before.updated_at = now; await this.save('categories', before); }
+      const after = t.category_id ? this.categories.find((x) => x.id === t.category_id) : undefined;
+      if (after) { after.use_count += 1; after.updated_at = now; await this.save('categories', after); }
+    }
+    this.emit();
+    this.requestSync();
+    return t;
+  }
+
   async deleteTransaction(id: string): Promise<void> {
     const t = this.transactions.find((x) => x.id === id);
     if (!t || t.deleted_at) return;

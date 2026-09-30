@@ -94,4 +94,25 @@ describe('AppStore', () => {
     expect(t.payment_method_id).toBeNull();
     expect(s.defaultPaymentMethodId).toBe(paypay.id);
   });
+
+  it('記録の修正: 金額・日付・メモを変えられ、カテゴリを変えると使用回数が付け替わる', async () => {
+    const s = await fresh('edit');
+    const date = s.categories.find((c) => c.name === 'デート')!;
+    const cafe = s.categories.find((c) => c.name === 'カフェ')!;
+    const t = await s.addTransaction({ amount: 1200, categoryId: date.id });
+    const before = t.updated_at;
+    await new Promise((r) => setTimeout(r, 2));
+    const u = await s.updateTransaction(t.id, { amount: 980.7, category_id: cafe.id, date: '2026-09-01', memo: 'ラテ' });
+    expect(u).toMatchObject({ amount: 980, category_id: cafe.id, date: '2026-09-01', memo: 'ラテ' });
+    expect(u!.updated_at > before).toBe(true);
+    expect(s.categories.find((c) => c.id === date.id)!.use_count).toBe(0);
+    expect(s.categories.find((c) => c.id === cafe.id)!.use_count).toBe(1);
+  });
+
+  it('削除済みの記録は修正できない', async () => {
+    const s = await fresh('edit2');
+    const t = await s.addTransaction({ amount: 100, categoryId: s.quickCategories[0]!.id });
+    await s.deleteTransaction(t.id);
+    expect(await s.updateTransaction(t.id, { amount: 1 })).toBeUndefined();
+  });
 });
