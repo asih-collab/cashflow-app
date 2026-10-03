@@ -135,4 +135,33 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await expect(page.getByTestId('budget-交際費')).toHaveValue('12,000');
     await expect(page.getByTestId('budget-total')).toHaveText('¥12,000');
   });
+
+  test('サマリ: カテゴリを押すと中分類と記録が開き、記録から修正できる。内訳の種別からカテゴリへ移れる', async ({ page }) => {
+    await openApp(page, '#/');
+    await record(page, '1200', '外食');
+    await record(page, '450', 'コンビニ');
+    await record(page, '800', '外食');
+    await page.goto('./#/summary');
+    await expect(page.getByTestId('sum-detail-食費')).toBeHidden();
+    await page.getByTestId('sum-group-食費').tap();
+    const detail = page.getByTestId('sum-detail-食費');
+    await expect(detail).toBeVisible();
+    await expect(detail.getByTestId('sub-row').first()).toContainText('外食');
+    await expect(detail.getByTestId('sub-row').first()).toContainText('¥2,000');
+    await expect(detail.getByTestId('sub-row').first()).toContainText('2 件');
+    await expect(detail.getByTestId('detail-item')).toHaveCount(3);
+    // もう一度押すと閉じる
+    await page.getByTestId('sum-group-食費').tap();
+    await expect(detail).toBeHidden();
+
+    // 内訳（変動費）を開き、食費を押すとカテゴリの詳細が開く
+    await page.getByTestId('mix-variable').tap();
+    await expect(page.getByTestId('mix-detail-variable')).toContainText('食費');
+    await page.getByTestId('mix-detail-variable').getByRole('button', { name: /食費/ }).tap();
+    await expect(detail).toBeVisible();
+
+    // 記録を押すと修正画面
+    await detail.getByTestId('detail-item').first().tap();
+    await expect(page.getByTestId('edit-delete')).toBeVisible();
+  });
 });

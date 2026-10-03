@@ -67,3 +67,41 @@ export function monthSummary(transactions: Transaction[], categories: Category[]
     groups: groups.sort((a, b) => b.amount - a.amount),
   };
 }
+
+export interface SubTotal {
+  categoryId: string;
+  name: string;
+  amount: number;
+  count: number;
+}
+
+export interface GroupDetail {
+  /** 中分類ごとの合計（多い順） */
+  subs: SubTotal[];
+  /** その大分類の記録（新しい日付順） */
+  items: Transaction[];
+}
+
+/** サマリでカテゴリ（大分類）を開いたときの中身。parentId が '' なら未分類 */
+export function groupDetail(transactions: Transaction[], categories: Category[], period: Period, parentId: string): GroupDetail {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const subs = new Map<string, SubTotal>();
+  const items: Transaction[] = [];
+  for (const t of transactions) {
+    if (t.deleted_at || t.type !== 'expense' || !inPeriod(t.date, period)) continue;
+    const c = t.category_id ? byId.get(t.category_id) : undefined;
+    if (c?.kind === 'income') continue;
+    const pid = c?.parent_id ?? c?.id ?? '';
+    if (pid !== parentId) continue;
+    items.push(t);
+    const key = c?.id ?? '';
+    const cur = subs.get(key) ?? { categoryId: key, name: c?.name ?? '未分類', amount: 0, count: 0 };
+    cur.amount += t.amount;
+    cur.count += 1;
+    subs.set(key, cur);
+  }
+  return {
+    subs: [...subs.values()].sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, 'ja')),
+    items: items.sort((a, b) => (b.date + b.created_at).localeCompare(a.date + a.created_at)),
+  };
+}
