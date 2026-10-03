@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { budgetId, budgetStatus, crossedThreshold } from '../../src/lib/budget';
 import { seedCategories } from '../../src/lib/categories';
 import { periodFor, shiftPeriod } from '../../src/lib/period';
-import { monthSummary } from '../../src/lib/summary';
+import { monthSummary, groupDetail } from '../../src/lib/summary';
 import type { Budget, Transaction } from '../../src/lib/types';
 
 const cats = seedCategories('2026-09-01T00:00:00.000Z');
@@ -76,5 +76,25 @@ describe('月次サマリ', () => {
     const g = s.groups.find((x) => x.name === '交際費')!;
     expect(g).toMatchObject({ amount: 12000, budget: 20000, prevAmount: 9000 });
     expect(s.groups[0]!.name).toBe('住宅');
+  });
+});
+
+describe('サマリの詳細（中分類と記録）', () => {
+  const period = periodFor(new Date(2026, 9, 11), 1);
+  it('大分類を開くと、中分類ごとの合計と記録が出る（期間外・収入・削除済みは除く）', () => {
+    const d = groupDetail([
+      tx('2026-10-02', 1200, '外食'),
+      tx('2026-10-05', 800, '外食'),
+      tx('2026-10-03', 450, 'コンビニ'),
+      tx('2026-10-04', 3000, 'デート'), // 別の大分類
+      tx('2026-09-30', 999, '外食'), // 期間外
+      tx('2026-10-06', 500, 'カフェ', { deleted_at: 'x' }),
+    ], cats, period, id('食費'));
+    expect(d.subs.map((x) => [x.name, x.amount, x.count])).toEqual([['外食', 2000, 2], ['コンビニ', 450, 1]]);
+    expect(d.items.map((t) => t.date)).toEqual(['2026-10-05', '2026-10-03', '2026-10-02']);
+  });
+  it('未分類（カテゴリなし）も開ける', () => {
+    const d = groupDetail([tx('2026-10-02', 700, null)], cats, period, '');
+    expect(d.subs).toEqual([{ categoryId: '', name: '未分類', amount: 700, count: 1 }]);
   });
 });
