@@ -28,7 +28,7 @@ export interface FakeBackend {
 
 /** Supabase のフェイク（page.route）。認証と REST の最小限 */
 export async function mockSupabase(page: Page): Promise<FakeBackend> {
-  const be: FakeBackend = { tables: { categories: new Map(), payment_methods: new Map(), transactions: new Map(), settings: new Map() }, requests: [], otpSent: [] };
+  const be: FakeBackend = { tables: { categories: new Map(), payment_methods: new Map(), transactions: new Map(), settings: new Map(), recurring_rules: new Map(), budgets: new Map() }, requests: [], otpSent: [] };
   let clock = Date.parse('2026-09-28T10:00:00Z');
   const handler = async (route: Route) => {
     const req = route.request();

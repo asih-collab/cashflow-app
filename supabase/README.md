@@ -6,6 +6,8 @@
 |---|---|
 | `migrations/0001_init.sql` | 段階 1 のテーブル（categories / payment_methods / transactions / settings）、同期用トリガー、Row Level Security |
 | `migrations/0002_signup_allowlist.sql` | 許可したメールアドレス以外の新規登録を拒否するトリガー（利用者は管理者が許可した人だけ） |
+| `migrations/0004_income_categories.sql` | カテゴリの種別に「収入」を追加 |
+| `migrations/0005_budgets_recurring.sql` | 予算（`budgets`）と毎月の自動計上ルール（`recurring_rules`）。RLS 付き |
 | `migrations/0003_per_user_keys.sql` | 主キーを (user_id, id) にして複数利用者に対応（初期データの固定 UUID が利用者間で衝突しないように） |
 | `auth-config.json` | Auth の設定（サイト URL、リダイレクト許可、6 桁コード入りのメール文面）。**メール文面は無料プラン + 標準メール送信では反映できない**（API が 400）。独自 SMTP を設定した場合に有効になる |
 | `../scripts/supabase-apply.sh` | 上記を Management API で反映するスクリプト |

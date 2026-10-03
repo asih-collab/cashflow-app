@@ -10,6 +10,7 @@ import type { AppContext, Route } from '../context';
 import { toast } from '../toast';
 import type { Category } from '../../lib/types';
 import { icon } from '../icons';
+import { budgetStatus, crossedThreshold } from '../../lib/budget';
 
 const MAX_DIGITS = 7;
 const QUICK_COUNT = 8;
@@ -59,7 +60,8 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   root.appendChild(cats);
 
   // 詳細（日付・支払い手段・メモ）は折りたたみ
-  const dateInput = h('input', { class: 'input', type: 'date', value: editing?.date ?? toDateString(new Date()), 'data-testid': 'date' });
+  const dateParam = route.params.get('date');
+  const dateInput = h('input', { class: 'input', type: 'date', value: editing?.date ?? (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : toDateString(new Date())), 'data-testid': 'date' });
   const pmSelect = h('select', { class: 'input', 'data-testid': 'payment-method' });
   for (const p of store.activePaymentMethods) {
     pmSelect.appendChild(h('option', { value: p.id, selected: p.id === (editing ? editing.payment_method_id : store.defaultPaymentMethodId) }, p.name));
@@ -197,6 +199,8 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
       history.length > 1 ? history.back() : ctx.navigate('/');
       return;
     }
+    const periodNow = periodFor(new Date(), store.settings.month_start_day);
+    const bsBefore = budgetStatus(store.budgets, store.transactions, store.categories, periodNow);
     const t = await store.addTransaction({
       amount: a,
       categoryId: selected.id,
@@ -213,6 +217,10 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     const msg = t.type === 'income'
       ? `${catName} +${yen(t.amount)} を収入として記録 ・ ${p.label}の収入 ${yen(s.incomeTotal)}`
       : `${catName} ${yen(t.amount)} を記録 ・ ${p.label} ${yen(s.variableTotal)}`;
+    const crossed = crossedThreshold(bsBefore, budgetStatus(store.budgets, store.transactions, store.categories, periodNow));
+    for (const l of crossed) {
+      toast(`注意: ${l.name}が予算の ${Math.round(l.ratio * 100)}% に達しました（${l.remaining >= 0 ? `残り ${yen(l.remaining)}` : `${yen(-l.remaining)} 超過`}）`, { durationMs: 6000 });
+    }
     toast(msg, {
       actionLabel: '取り消す',
       durationMs: 5000,
@@ -224,6 +232,9 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   }
 
   setMode(mode);
+  if (!editing && dateParam && dateParam !== toDateString(new Date())) {
+    summary.textContent = `詳細（${dateParam.slice(5).replace('-', '/')} に記録）`;
+  }
   if (editing) {
     root.classList.add('editing');
     ctx.busy.entering = true;

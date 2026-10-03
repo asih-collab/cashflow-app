@@ -9,6 +9,8 @@ export const ICONS = {
   backspace: svg('<path d="M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7 6-7z"/><path d="M13 10l4 4M17 10l-4 4"/>'),
   trash: svg('<path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
   chevron: svg('<path d="M9 6l6 6-6 6"/>'),
+  list: svg('<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.5" cy="7" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17" r="1"/>'),
+  chart: svg('<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>'),
 };
 
 export function icon(name: keyof typeof ICONS): HTMLElement {

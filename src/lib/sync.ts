@@ -26,7 +26,7 @@ export interface SessionStore {
   set(s: Session | null): void;
 }
 
-const TABLES: SyncTable[] = ['categories', 'payment_methods', 'transactions', 'settings'];
+const TABLES: SyncTable[] = ['categories', 'payment_methods', 'recurring_rules', 'budgets', 'transactions', 'settings'];
 const PAGE = 1000;
 const TS_FIELDS = ['created_at', 'updated_at', 'deleted_at'];
 
