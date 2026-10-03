@@ -58,7 +58,41 @@ export interface Settings {
   updated_at: string;
 }
 
-export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings';
+export interface RecurringRule {
+  id: string;
+  name: string;
+  amount: number;
+  type: TransactionType;
+  category_id: string | null;
+  payment_method_id: string | null;
+  /** 毎月何日に計上するか（月末より大きい日は月末） */
+  day_of_month: number;
+  /** 'YYYY-MM' この月から計上 */
+  start_month: string;
+  /** 'YYYY-MM' この月まで（含む）。null なら無期限 */
+  end_month: string | null;
+  /** 準固定費（光熱費など）: 仮の金額で計上し、あとで直す */
+  needs_review: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface Budget {
+  id: string;
+  /** 予算期間の初日（YYYY-MM-DD） */
+  period_start: string;
+  /** 大分類の ID */
+  category_id: string;
+  amount: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets';
 
 export interface Session {
   access_token: string;

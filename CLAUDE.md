@@ -8,11 +8,11 @@
 | 層 | 技術 | 場所 |
 |---|---|---|
 | UI | HTML / CSS / TypeScript（フレームワークなし、依存最小） | `src/ui/`（`views/` に画面、`dom.ts` は小さなヘルパー） |
-| ロジック | 純粋な TypeScript（テスト対象） | `src/lib/`（`period` 予算期間、`stats` 集計、`categories` 初期セットと並び、`store` データ操作、`sync` 同期、`supabase` 最小クライアント、`db` IndexedDB） |
+| ロジック | 純粋な TypeScript（テスト対象） | `src/lib/`（`period` 予算期間、`stats` 集計・日別、`budget` 予算と残額、`recurring` 毎月の自動計上、`summary` 月次サマリ、`categories` 初期セットと並び、`store` データ操作、`sync` 同期、`supabase` 最小クライアント、`db` IndexedDB） |
 | オフライン | 自前の Service Worker | `src/sw.js`（テンプレート）→ `scripts/build-sw.mjs` が `dist/sw.js` を生成 |
 | データ | IndexedDB（端末が正）+ Supabase（Postgres, RLS） | `supabase/migrations/`、`supabase/README.md` |
 | 公開 | GitHub Pages（`main` への push で GitHub Actions が test → build → `gh-pages` ブランチへ配置。Pages はそのブランチを公開する） | `.github/workflows/deploy.yml` |
-| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/settings` 設定、`#/categories`、`#/login`）。`#/add?amount=1200&cat=デート` で値を渡せる（ショートカット用） | `src/main.ts` |
+| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=` 履歴、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート`（ショートカット用）や `#/add?date=YYYY-MM-DD` で値を渡せる | `src/main.ts` |
 
 公開 URL: `https://asih-collab.github.io/cashflow-app/`（`vite.config.ts` の `base` と一致させる）
 
@@ -64,7 +64,8 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 - 端末内 IndexedDB が正。保存は即時、同期はあとから（`outbox` に未送信を残す）。衝突は `updated_at` が新しい方
 - 初期データ（カテゴリ・支払い手段）は固定 UUID・固定の古い時刻。別端末で先に使っていた場合にそちらが勝つため
 - 削除は論理削除（`deleted_at`）
-- 段階 1 では予算なし。ホームは「今月の変動費合計 + 中分類別内訳」
+- ホームは予算がある月は「あと使える額」、ない月は「今月の変動費合計」が主役
+- 自動計上の記録 ID は「ルール ID + 年月」、予算の ID は「大分類 + 期間の初日」から決める（複数端末で重複させないため）。この仕組みを変えるときは二重計上のテスト（`tests/unit/recurring.test.ts`、`sync.test.ts`）を必ず通す
 
 ## 作業の記録
 
@@ -75,5 +76,5 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 ## ロードマップ（07_MVPスコープ.md より）
 
 段階 1（本リポジトリの現状）: F01 クイック記録、F04 カテゴリ、F02 ホーム（合計版）、F10 ログインと同期、ホーム画面追加の案内
-段階 2: F05 予算、F06 固定支出の自動計上、F07 月次サマリ、F11 編集・過去日付
+段階 2（2026-10-03 実装済み）: F05 予算、F06 固定支出・給料の自動計上、F07 月次サマリ、F11 編集・過去日付・履歴
 段階 3: F09 通知、F08 リボ残高、iOS ショートカット、PWA の仕上げ

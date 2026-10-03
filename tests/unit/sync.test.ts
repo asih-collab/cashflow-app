@@ -88,7 +88,7 @@ describe('同期', () => {
     const before = server.calls.length;
     await b.syncer.sync();
     const gets = server.calls.slice(before).filter((c) => c.method === 'GET');
-    expect(gets.length).toBe(4); // テーブルごとに 1 回ずつ、いずれも空
+    expect(gets.length).toBe(6); // テーブルごとに 1 回ずつ、いずれも空
     expect(b.store.liveTransactions).toHaveLength(2);
   });
 
@@ -185,5 +185,19 @@ describe('同期', () => {
   it('normalizeRemoteRow はサーバー専用列を除き、時刻を ISO に揃える', () => {
     const r = normalizeRemoteRow({ id: '1', user_id: 'u', synced_at: 'x', updated_at: '2026-09-28T10:00:00.123+00:00', deleted_at: null });
     expect(r).toEqual({ id: '1', updated_at: '2026-09-28T10:00:00.123Z', deleted_at: null });
+  });
+
+  it('固定費のルールは別の端末で同時に計上しても二重にならない', async () => {
+    const a = await device(server, 'a');
+    const rent = a.store.categories.find((c) => c.name === '家賃')!;
+    await a.store.saveRule({ name: '家賃', amount: 100000, type: 'expense', category_id: rent.id, payment_method_id: null, day_of_month: 27, needs_review: false });
+    await a.syncer.sync();
+    const b = await device(server, 'b');
+    await b.syncer.sync(); // ルールを取り込み、b でも計上処理が走る
+    await b.syncer.sync();
+    await a.syncer.sync();
+    const rentTx = [...server.tables.transactions!.values()].filter((t) => t.recurring_rule_id);
+    expect(rentTx).toHaveLength(1);
+    expect(b.store.liveTransactions.filter((t) => t.source === 'recurring')).toHaveLength(1);
   });
 });

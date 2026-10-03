@@ -15,6 +15,10 @@ import { renderCategories } from './ui/views/categories';
 import { renderLogin } from './ui/views/login';
 import { ONBOARDED_KEY, showOnboarding } from './ui/views/onboarding';
 import { renderHandoff } from './ui/views/handoff';
+import { renderBudget } from './ui/views/budget';
+import { renderRecurring } from './ui/views/recurring';
+import { renderSummary } from './ui/views/summary';
+import { renderHistory } from './ui/views/history';
 import { isIOS, isStandalone } from './ui/install';
 import { icon } from './ui/icons';
 
@@ -84,12 +88,14 @@ async function boot(): Promise<void> {
 
   function renderTabs(path: string): void {
     clear(tabbar);
-    const tab = (href: string, ico: 'home' | 'add' | 'settings', label: string, active: boolean, extra = '') =>
+    const tab = (href: string, ico: 'home' | 'add' | 'settings' | 'list' | 'chart', label: string, active: boolean, extra = '') =>
       h('a', { href, class: (active ? 'active ' : '') + extra, 'data-testid': `tab-${href.slice(2) || 'home'}` }, icon(ico), label);
     tabbar.append(
       tab('#/', 'home', 'ホーム', path === '/'),
+      tab('#/history', 'list', '履歴', path === '/history' || path === '/edit'),
       tab('#/add', 'add', '記録', path === '/add', 'add'),
-      tab('#/settings', 'settings', '設定', path === '/settings' || path === '/categories' || path === '/login' || path === '/handoff'),
+      tab('#/summary', 'chart', 'サマリ', path === '/summary' || path === '/budget'),
+      tab('#/settings', 'settings', '設定', ['/settings', '/categories', '/login', '/handoff', '/recurring'].includes(path)),
     );
   }
 
@@ -105,6 +111,10 @@ async function boot(): Promise<void> {
       case '/categories': el = renderCategories(ctx); break;
       case '/login': el = renderLogin(ctx); break;
       case '/handoff': el = renderHandoff(ctx); break;
+      case '/budget': el = renderBudget(ctx, route); break;
+      case '/recurring': el = renderRecurring(ctx, route); break;
+      case '/summary': el = renderSummary(ctx, route); break;
+      case '/history': el = renderHistory(ctx, route); break;
       default: el = renderHome(ctx);
     }
     clear(view);
@@ -116,7 +126,7 @@ async function boot(): Promise<void> {
   window.addEventListener('hashchange', render);
   // データや同期状態が変わったら、入力中でない画面だけ描き直す
   const rerenderIfIdle = () => {
-    if (ctx.route?.path === '/add' || ctx.route?.path === '/edit' || ctx.route?.path === '/login' || ctx.route?.path === '/handoff') return;
+    if (['/add', '/edit', '/login', '/handoff', '/budget', '/recurring'].includes(ctx.route?.path ?? '')) return;
     render();
   };
   store.subscribe(rerenderIfIdle);
@@ -136,7 +146,11 @@ async function boot(): Promise<void> {
   // 同期のきっかけ: 起動時、通信復帰、画面復帰、5 分ごと
   void syncer.sync();
   window.addEventListener('online', () => void syncer.sync());
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void syncer.sync(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    void store.applyRecurring(); // 月が変わっていたら、その月の固定費・給料を記録
+    void syncer.sync();
+  });
   setInterval(() => void syncer.sync(), 5 * 60 * 1000);
 
   registerServiceWorker(ctx);

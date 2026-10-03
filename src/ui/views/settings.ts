@@ -63,8 +63,10 @@ export function renderSettings(ctx: AppContext): HTMLElement {
 
   // ---- カテゴリ・支払い手段 ----
   const lists = h('div', { class: 'card' });
+  lists.appendChild(h('a', { class: 'list-item', href: '#/recurring', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-recurring' }, h('span', { class: 'grow' }, '固定費・定期の収入（毎月の自動記録）'), h('span', { class: 'muted' }, icon('chevron'))));
+  lists.appendChild(h('a', { class: 'list-item', href: '#/budget', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-budget-settings' }, h('span', { class: 'grow' }, '予算'), h('span', { class: 'muted' }, icon('chevron'))));
   lists.appendChild(h('a', { class: 'list-item', href: '#/categories', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-categories' }, h('span', { class: 'grow' }, 'カテゴリ（追加・名前の変更・非表示）'), h('span', { class: 'muted' }, icon('chevron'))));
-  root.appendChild(h('h2', null, 'カテゴリと支払い手段'));
+  root.appendChild(h('h2', null, '家計の設定'));
   root.appendChild(lists);
 
   const pms = h('div', { class: 'card', 'data-testid': 'payment-methods' });

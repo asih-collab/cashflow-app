@@ -16,7 +16,7 @@ export function makeSession(token = 'tok', expiresInSec = 3600): Session {
 }
 
 export function fakeServer(): FakeServer {
-  const tables: FakeServer['tables'] = { categories: new Map(), payment_methods: new Map(), transactions: new Map(), settings: new Map() };
+  const tables: FakeServer['tables'] = { categories: new Map(), payment_methods: new Map(), transactions: new Map(), settings: new Map(), recurring_rules: new Map(), budgets: new Map() };
   const s: FakeServer = {
     tables, calls: [], clock: { now: Date.parse('2026-09-28T10:00:00Z') }, validToken: 'tok', refreshOk: true, failNext: null,
     fetch: async (input, init) => {

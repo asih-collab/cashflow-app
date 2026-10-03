@@ -238,3 +238,37 @@ input[type=date].input { color-scheme: dark; }
 a.row-link.grow { flex-direction: column; align-items: stretch; gap: 0; }
 .row-link .ico { color: var(--faint); }
 .add-view.editing .segmented::after { content: "EDIT"; font-family: var(--mono); font-size: 10px; letter-spacing: .16em; color: var(--accent); align-self: center; padding: 0 10px; }
+
+/* ---- 月の切り替え・サマリ・予算・履歴 ---- */
+.month-nav { display: flex; align-items: center; justify-content: space-between; margin: 0 0 14px; }
+.month-nav .btn { width: 40px; padding: 0; }
+.month-label { display: flex; align-items: baseline; gap: 10px; }
+.month-label b { font-size: 20px; font-weight: 800; }
+.month-label .now { color: var(--accent); }
+.balance { position: relative; overflow: hidden; }
+.balance::before { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 100% 0%, var(--accent-soft), transparent 60%); pointer-events: none; }
+.balance.black::before { background: radial-gradient(120% 90% at 100% 0%, rgba(154,209,122,.14), transparent 60%); }
+.balance-num { font-family: var(--display); font-size: 64px; line-height: 1; margin: 10px 0 8px; position: relative; }
+.balance.black .balance-num { color: var(--good); }
+.balance.red .balance-num { color: var(--accent); }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; position: relative; }
+.kv > div { display: flex; flex-direction: column; gap: 4px; }
+.kv b { font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 1; }
+.delta { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; color: var(--muted); }
+.delta.up { color: var(--accent); }
+.delta.down { color: var(--good); }
+.kv .is-income + .delta.up { color: var(--good); }
+.kv .is-income + .delta.down { color: var(--accent); }
+.stack { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; margin: 2px 0 10px; }
+.stack i { display: block; height: 100%; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.bar.over > i { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.budget-input { width: 120px; text-align: right; font-family: var(--display); font-size: 20px; min-height: 42px; padding: 6px 10px; }
+.day-head { display: flex; justify-content: space-between; margin: 18px 4px 6px; color: var(--ink-2); }
+.day-head.future { opacity: .6; }
+.tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 6px; padding: 1px 5px; margin-left: 8px; vertical-align: 2px; }
+.budget-lines .list-item { padding: 10px 0; min-height: 0; flex-direction: column; align-items: stretch; gap: 6px; }
+
+.hero.over .big { color: var(--accent); }
+.tabbar a .ico svg { width: 21px; height: 21px; }
+.tabbar a.add .ico { width: 48px; }

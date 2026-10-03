@@ -3,6 +3,7 @@ import { yen } from '../../lib/money';
 import { periodFor } from '../../lib/period';
 import { statsFor, perDaySoFar, dailyTotals } from '../../lib/stats';
 import { renderDailyChart } from '../dailyChart';
+import { budgetStatus } from '../../lib/budget';
 import { toDateString } from '../../lib/period';
 import { categoryById } from '../../lib/categories';
 import type { AppContext } from '../context';
@@ -33,20 +34,28 @@ export function renderHome(ctx: AppContext): HTMLElement {
     ),
   );
 
-  // 主役: 今月の変動費合計（予算は段階 2）。背景は朱色の光
-  const digits = String(stats.variableTotal).length;
-  const totalText = yen(stats.variableTotal).replace(/^¥/, '');
+  // 主役: 予算があれば「今月あと使える額」、なければ今月の変動費合計
+  const bs = budgetStatus(store.budgets, store.transactions, store.categories, period);
+  const shown = bs.hasBudget ? bs.remaining : stats.variableTotal;
+  const digits = String(Math.abs(shown)).length;
+  const totalText = yen(Math.abs(shown)).replace(/^¥/, '');
   root.appendChild(
-    h('div', { class: 'hero' },
+    h('div', { class: 'hero' + (bs.hasBudget && bs.remaining < 0 ? ' over' : '') },
       artworkElement('ember', now.getFullYear() * 100 + now.getMonth() + 1),
-      h('div', { class: 'label' }, 'Variable spend / 変動費'),
-      h('div', { class: 'big' + (digits >= 7 ? ' xl' : digits >= 6 ? ' l' : ''), 'data-testid': 'variable-total', 'aria-label': yen(stats.variableTotal) },
-        h('span', { class: 'yen' }, '¥'), totalText),
-      h('div', { class: 'sub' },
-        h('span', null, 'COUNT', h('b', null, String(stats.expenseCount))),
-        h('span', null, 'PER DAY', h('b', null, yen(perDaySoFar(stats.variableTotal, period)))),
-        h('span', null, 'INCOME', h('b', { 'data-testid': 'income-total', class: 'is-income' }, `+${yen(stats.incomeTotal)}`)),
-      ),
+      h('div', { class: 'label' }, bs.hasBudget ? (bs.remaining >= 0 ? 'Left to spend / あと使える' : 'Over budget / 予算超過') : 'Variable spend / 変動費'),
+      h('div', { class: 'big' + (digits >= 7 ? ' xl' : digits >= 6 ? ' l' : ''), 'data-testid': bs.hasBudget ? 'remaining' : 'variable-total', 'aria-label': yen(shown) },
+        h('span', { class: 'yen' }, shown < 0 ? '−¥' : '¥'), totalText),
+      bs.hasBudget
+        ? h('div', { class: 'sub' },
+            h('span', null, 'PER DAY', h('b', { 'data-testid': 'per-day-left' }, yen(bs.perDayLeft))),
+            h('span', null, 'SPENT', h('b', { 'data-testid': 'variable-total' }, yen(stats.variableTotal))),
+            h('span', null, 'BUDGET', h('b', null, yen(bs.totalBudget))),
+          )
+        : h('div', { class: 'sub' },
+            h('span', null, 'COUNT', h('b', null, String(stats.expenseCount))),
+            h('span', null, 'PER DAY', h('b', null, yen(perDaySoFar(stats.variableTotal, period)))),
+            h('span', null, 'INCOME', h('b', { 'data-testid': 'income-total', class: 'is-income' }, `+${yen(stats.incomeTotal)}`)),
+          ),
       h('div', { class: 'progress', 'aria-hidden': 'true' }, h('i', { style: `width:${Math.round((elapsed / period.totalDays) * 100)}%` })),
       h('div', { class: 'progress-legend' },
         h('span', null, `Day ${elapsed} / ${period.totalDays}`),
@@ -60,6 +69,28 @@ export function renderHome(ctx: AppContext): HTMLElement {
       h('a', { class: 'btn primary big', href: '#/add', 'data-testid': 'go-add', style: 'text-decoration:none' }, icon('add'), '記録する'),
     ),
   );
+
+  // 予算（大分類ごとの残り）
+  if (bs.hasBudget) {
+    root.appendChild(h('div', { class: 'row', style: 'margin-top:28px' }, h('h2', { class: 'grow', style: 'margin:0' }, '予算 / Budget'), h('a', { class: 'btn sm', href: '#/budget', style: 'text-decoration:none;margin-left:10px' }, '変更')));
+    const card = h('div', { class: 'card tight budget-lines', 'data-testid': 'budget-lines', style: 'margin-top:10px' });
+    for (const l of bs.lines) {
+      const over = l.budget > 0 && l.remaining < 0;
+      card.appendChild(h('div', { class: 'list-item' },
+        h('div', { class: 'row' },
+          h('span', { class: 'grow', style: 'font-weight:700' }, l.name),
+          h('span', { class: 'amount', style: 'font-size:18px' }, l.budget > 0 ? (over ? `−${yen(-l.remaining)}` : yen(l.remaining)) : yen(l.spent)),
+        ),
+        l.budget > 0 ? h('div', { class: 'bar' + (over || l.ratio >= 0.8 ? ' over' : '') }, h('i', { style: `width:${Math.min(100, Math.round(l.ratio * 100))}%` })) : null,
+        h('div', { class: 'recent-meta' }, l.budget > 0 ? `${yen(l.spent)} / ${yen(l.budget)} · ${Math.round(l.ratio * 100)}%${over ? ' · 超過' : ' · 残り'}` : '予算なし · 使った額'),
+      ));
+    }
+    root.appendChild(card);
+  } else if (store.budgets.length === 0) {
+    root.appendChild(h('a', { class: 'banner', href: '#/budget', 'data-testid': 'budget-hint', style: 'display:block;text-decoration:none;margin-top:16px' },
+      h('b', null, '予算を決める'), h('div', { class: 'small' }, '大分類ごとに予算を決めると、ここに「今月あといくら使えるか」が出ます。'),
+    ));
+  }
 
   // 日別
   root.appendChild(h('h2', null, '日別 / Daily'));
@@ -96,9 +127,11 @@ export function renderHome(ctx: AppContext): HTMLElement {
   }
 
   // 最近の記録（直近 8 件）。間違えたらここで消せる
+  // 最近の記録: 入力した順。まだ来ていない日付の自動記録（固定費の予定）は履歴でだけ見せる
+  const todayStr = toDateString(new Date());
   const recent = store.liveTransactions
-    .filter((t) => t.date >= period.start && t.date <= period.end)
-    .sort((a, b) => (b.date + b.created_at).localeCompare(a.date + a.created_at))
+    .filter((t) => t.date >= period.start && t.date <= todayStr)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.date.localeCompare(a.date))
     .slice(0, 8);
   if (recent.length > 0) {
     root.appendChild(h('h2', null, '最近 / Recent'));

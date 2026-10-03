@@ -4,7 +4,9 @@ import type { Db } from './db';
 import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
 import { toDateString } from './period';
-import type { Category, PaymentMethod, PaymentMethodType, Settings, SyncTable, Transaction } from './types';
+import type { Budget, Category, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
+import { dueRecurringTransactions, monthKey, postingDate } from './recurring';
+import { budgetId } from './budget';
 import type { Syncer } from './sync';
 
 export interface NewTransaction {
@@ -44,6 +46,8 @@ export class AppStore {
   categories: Category[] = [];
   paymentMethods: PaymentMethod[] = [];
   transactions: Transaction[] = [];
+  recurringRules: RecurringRule[] = [];
+  budgets: Budget[] = [];
   settings: Settings = { ...DEFAULT_SETTINGS };
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -80,19 +84,126 @@ export class AppStore {
       for (const p of seeds) await this.syncer?.markDirty('payment_methods', p.id, p.updated_at);
     }
     await this.reload();
+    await this.applyRecurring();
   }
 
   async reload(): Promise<void> {
     this.categories = await this.db.getAll<Category>('categories');
     this.paymentMethods = await this.db.getAll<PaymentMethod>('payment_methods');
     this.transactions = await this.db.getAll<Transaction>('transactions');
+    this.recurringRules = await this.db.getAll<RecurringRule>('recurring_rules');
+    this.budgets = await this.db.getAll<Budget>('budgets');
     this.settings = { ...DEFAULT_SETTINGS, ...((await this.db.get<Settings>('settings', 'me')) ?? {}) };
     this.emit();
   }
 
-  /** 同期で取り込んだ変更を反映する */
-  async onPulled(_tables: SyncTable[]): Promise<void> {
+  /** 同期で取り込んだ変更を反映する（別の端末で追加されたルールの計上もここで行う） */
+  async onPulled(tables: SyncTable[]): Promise<void> {
     await this.reload();
+    if (tables.includes('recurring_rules')) await this.applyRecurring();
+  }
+
+  // ---- 毎月の自動計上（F06） -------------------------------------------------
+
+  get activeRules(): RecurringRule[] {
+    return this.recurringRules.filter((r) => !r.deleted_at).sort((a, b) => a.sort_order - b.sort_order || a.day_of_month - b.day_of_month);
+  }
+
+  /** まだ計上していない月の分を計上する。何度呼んでも二重には計上しない */
+  async applyRecurring(today = new Date()): Promise<Transaction[]> {
+    const existing = new Set(this.transactions.map((t) => t.id));
+    const due = dueRecurringTransactions(this.recurringRules, existing, today, nowIso());
+    if (due.length === 0) return [];
+    await this.db.putMany('transactions', due);
+    for (const t of due) await this.syncer?.markDirty('transactions', t.id, t.updated_at);
+    this.transactions.push(...due);
+    this.emit();
+    this.requestSync();
+    return due;
+  }
+
+  async saveRule(input: Omit<RecurringRule, 'id' | 'created_at' | 'updated_at' | 'deleted_at' | 'sort_order' | 'start_month' | 'end_month' | 'is_active'> & Partial<Pick<RecurringRule, 'id' | 'start_month' | 'end_month' | 'is_active'>>): Promise<RecurringRule> {
+    const now = nowIso();
+    const existing = input.id ? this.recurringRules.find((r) => r.id === input.id) : undefined;
+    const { id: _id, ...fields } = input;
+    const rule: RecurringRule = existing
+      ? { ...existing, ...fields, id: existing.id, amount: Math.max(0, Math.trunc(input.amount)), updated_at: now }
+      : {
+          ...fields,
+          id: uuid(), sort_order: this.recurringRules.length, start_month: input.start_month ?? monthKey(new Date()), end_month: input.end_month ?? null,
+          is_active: input.is_active ?? true, created_at: now, updated_at: now, deleted_at: null,
+          amount: Math.max(0, Math.trunc(input.amount)),
+        };
+    await this.save('recurring_rules', rule);
+    if (!existing) this.recurringRules.push(rule);
+    else Object.assign(existing, rule);
+    // 今月まだ計上していなければ計上。すでに計上済みの今月分は、金額などを新しいルールに合わせる（手で直していない場合）
+    await this.applyRecurring();
+    if (existing) await this.syncRulePostingThisMonth(rule);
+    this.emit();
+    this.requestSync();
+    return rule;
+  }
+
+  private async syncRulePostingThisMonth(rule: RecurringRule): Promise<void> {
+    const m = monthKey(new Date());
+    const t = this.transactions.find((x) => x.recurring_rule_id === rule.id && x.date.startsWith(m) && !x.deleted_at);
+    if (!t || t.created_at !== t.updated_at) return; // 手で直した記録はそのまま
+    Object.assign(t, {
+      amount: rule.amount, type: rule.type, category_id: rule.category_id,
+      payment_method_id: rule.type === 'income' ? null : rule.payment_method_id,
+      date: postingDate(m, rule.day_of_month), memo: rule.name,
+    });
+    t.updated_at = t.created_at = nowIso();
+    await this.save('transactions', t);
+  }
+
+  /** ルールを止める（今後の月は計上しない。計上済みの記録は残す） */
+  async deleteRule(id: string): Promise<void> {
+    const r = this.recurringRules.find((x) => x.id === id);
+    if (!r) return;
+    const now = nowIso();
+    r.deleted_at = now;
+    r.updated_at = now;
+    await this.save('recurring_rules', r);
+    this.emit();
+    this.requestSync();
+  }
+
+  // ---- 予算（F05） ------------------------------------------------------------
+
+  budgetsFor(periodStart: string): Budget[] {
+    return this.budgets.filter((b) => b.period_start === periodStart && !b.deleted_at);
+  }
+
+  async setBudget(categoryId: string, periodStart: string, amount: number): Promise<void> {
+    const id = budgetId(categoryId, periodStart);
+    const now = nowIso();
+    const v = Math.max(0, Math.trunc(amount) || 0);
+    let b = this.budgets.find((x) => x.id === id);
+    if (b) {
+      Object.assign(b, { amount: v, updated_at: now, deleted_at: v > 0 ? null : now });
+    } else {
+      if (v === 0) return;
+      b = { id, period_start: periodStart, category_id: categoryId, amount: v, created_at: now, updated_at: now, deleted_at: null };
+      this.budgets.push(b);
+    }
+    await this.save('budgets', b);
+    this.emit();
+    this.requestSync();
+  }
+
+  /** 前の期間の予算を写す（すでに入っている大分類は上書きしない） */
+  async copyBudgets(fromStart: string, toStart: string): Promise<number> {
+    const from = this.budgetsFor(fromStart);
+    const to = new Set(this.budgetsFor(toStart).map((b) => b.category_id));
+    let n = 0;
+    for (const b of from) {
+      if (to.has(b.category_id)) continue;
+      await this.setBudget(b.category_id, toStart, b.amount);
+      n++;
+    }
+    return n;
   }
 
   private async save<T extends { updated_at: string }>(table: SyncTable, row: T, key?: string): Promise<void> {

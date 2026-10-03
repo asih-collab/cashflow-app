@@ -62,3 +62,14 @@ export function periodFor(today: Date, startDay = 1): Period {
 export function inPeriod(date: string, p: Period): boolean {
   return date >= p.start && date <= p.end;
 }
+
+/** 指定した期間の n 個前（負なら後）の期間 */
+export function shiftPeriod(p: Period, n: number, startDay: number): Period {
+  const d = parseDate(p.start);
+  const target = new Date(d.getFullYear(), d.getMonth() - n, d.getDate());
+  const sd = Math.min(28, Math.max(1, Math.trunc(startDay) || 1));
+  const anchor = new Date(target.getFullYear(), target.getMonth(), Math.max(sd, 1));
+  const q = periodFor(anchor, sd);
+  // 過去・未来の期間では「残り日数」は意味がないので、全日数を入れておく
+  return { ...q, daysLeft: q.totalDays };
+}
