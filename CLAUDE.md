@@ -12,7 +12,7 @@
 | オフライン | 自前の Service Worker | `src/sw.js`（テンプレート）→ `scripts/build-sw.mjs` が `dist/sw.js` を生成 |
 | データ | IndexedDB（端末が正）+ Supabase（Postgres, RLS） | `supabase/migrations/`、`supabase/README.md` |
 | 公開 | GitHub Pages（`main` への push で GitHub Actions が test → build → `gh-pages` ブランチへ配置。Pages はそのブランチを公開する） | `.github/workflows/deploy.yml` |
-| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=` 履歴、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート`（ショートカット用）や `#/add?date=YYYY-MM-DD` で値を渡せる | `src/main.ts` |
+| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=&d=` 履歴（カレンダー。`d` は選んだ日）、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート`（ショートカット用）や `#/add?date=YYYY-MM-DD&type=income&ret=<戻り先>` で値を渡せる（`ret` は保存後の戻り先） | `src/main.ts` |
 
 公開 URL: `https://asih-collab.github.io/cashflow-app/`（`vite.config.ts` の `base` と一致させる）
 

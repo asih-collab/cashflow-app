@@ -228,7 +228,13 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
         void store.deleteTransaction(t.id).then(() => toast('取り消しました'));
       },
     });
-    ctx.navigate('/');
+    ctx.navigate(returnTo());
+  }
+
+  /** 保存後に戻る画面（履歴のカレンダーから来た場合はそこへ） */
+  function returnTo(): string {
+    const r = route.params.get('ret');
+    return r && r.startsWith('/') ? r : '/';
   }
 
   setMode(mode);

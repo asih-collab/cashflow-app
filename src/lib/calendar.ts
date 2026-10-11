@@ -1,0 +1,57 @@
+// 履歴のカレンダー表示: 予算期間を週ごとのマスに並べ、日ごとの収支を出す。
+
+import type { Category, Transaction } from './types';
+import { parseDate, toDateString, type Period } from './period';
+
+export interface DayNet {
+  income: number;
+  expense: number;
+  /** 収入 − 支出 */
+  net: number;
+  count: number;
+}
+
+export interface CalendarCell {
+  /** YYYY-MM-DD。期間外の埋め草なら null */
+  date: string | null;
+  day: number;
+}
+
+/** 期間を日曜始まりの週に並べる（前後の空きは date: null） */
+export function calendarCells(period: Period): CalendarCell[] {
+  const start = parseDate(period.start);
+  const cells: CalendarCell[] = [];
+  for (let i = 0; i < start.getDay(); i++) cells.push({ date: null, day: 0 });
+  for (let i = 0; i < period.totalDays; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    cells.push({ date: toDateString(d), day: d.getDate() });
+  }
+  while (cells.length % 7 !== 0) cells.push({ date: null, day: 0 });
+  return cells;
+}
+
+/** 日ごとの収入・支出・収支。収入カテゴリで支出として記録したものは収入から差し引く（サマリと同じ扱い） */
+export function dailyNet(transactions: Transaction[], categories: Category[], period: Period): Map<string, DayNet> {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const out = new Map<string, DayNet>();
+  for (const t of transactions) {
+    if (t.deleted_at || t.date < period.start || t.date > period.end) continue;
+    const cur = out.get(t.date) ?? { income: 0, expense: 0, net: 0, count: 0 };
+    const kind = t.category_id ? byId.get(t.category_id)?.kind : undefined;
+    if (t.type === 'income') cur.income += t.amount;
+    else if (kind === 'income') cur.income -= t.amount;
+    else cur.expense += t.amount;
+    cur.net = cur.income - cur.expense;
+    cur.count += 1;
+    out.set(t.date, cur);
+  }
+  return out;
+}
+
+/** マスに収まる短い金額表記。1 万以上は「万」でまとめる（例: 5,600 → 5,600、21,400 → 2.1万、320,000 → 32万） */
+export function compactYen(n: number): string {
+  const a = Math.abs(Math.trunc(n));
+  if (a < 10000) return a.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const man = a / 10000;
+  return `${man < 10 ? man.toFixed(1).replace(/\.0$/, '') : Math.round(man)}万`;
+}
