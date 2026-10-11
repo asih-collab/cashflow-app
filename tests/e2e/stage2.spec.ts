@@ -1,6 +1,12 @@
 import { expect, test } from './fixtures';
 import { openApp, tapDigits } from './helpers';
 
+/** 今月の n 日（YYYY-MM-DD） */
+function dayOfThisMonth(n: number): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(n).padStart(2, '0')}`;
+}
+
 async function record(page: import('@playwright/test').Page, amount: string, cat: string) {
   await page.goto('./#/add');
   await expect(page.getByTestId('cat-デート')).toBeVisible();
@@ -51,10 +57,16 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await page.getByTestId('rule-save').tap();
     await expect(page.getByTestId('rule-給料')).toContainText('+¥300,000');
 
-    // 開き直しても二重にならない
+    // 開き直しても二重にならない。カレンダーの 27 日・25 日に出る
     await page.reload();
     await page.goto('./#/history');
-    await expect(page.getByTestId('history-row')).toHaveCount(2);
+    await page.getByTestId(`cal-${dayOfThisMonth(27)}`).tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await expect(page.getByTestId('history-row')).toContainText('家賃');
+    await expect(page.getByTestId(`cal-${dayOfThisMonth(27)}`)).toContainText('10万');
+    await page.getByTestId(`cal-${dayOfThisMonth(25)}`).tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await expect(page.getByTestId('day-net')).toHaveText('+¥300,000');
 
     await record(page, '5000', 'デート');
     await page.goto('./#/summary');
@@ -79,6 +91,7 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await page.getByTestId('rule-save').tap();
     await expect(page.getByTestId('rule-携帯')).toContainText('¥9,000');
     await page.goto('./#/history');
+    await page.getByTestId(`cal-${dayOfThisMonth(1)}`).tap();
     await expect(page.getByTestId('history-row')).toHaveCount(1);
     await expect(page.getByTestId('history-row')).toContainText('¥9,000');
     await page.goto('./#/recurring');
@@ -87,32 +100,48 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await page.getByTestId('rule-delete').tap();
     await expect(page.getByTestId('rule-list')).not.toContainText('携帯');
     await page.goto('./#/history');
+    await page.getByTestId(`cal-${dayOfThisMonth(1)}`).tap();
     await expect(page.getByTestId('history-row')).toHaveCount(1);
   });
 
-  test('履歴: 前の月に移動して過去の日付で追加し、修正できる。前月比も出る', async ({ page }) => {
+  test('履歴カレンダー: 前の月の日付を押して追加し、カレンダーに戻る。記録を直せる。前月比も出る', async ({ page }) => {
     await openApp(page, '#/history');
     const nowLabel = await page.getByTestId('month-label').textContent();
     await page.getByTestId('month-prev').tap();
     await expect(page.getByTestId('month-label')).not.toHaveText(nowLabel!);
     const label = await page.getByTestId('month-label').textContent();
+    // 前の月の 10 日を押して、その日に追加
+    const cell = page.locator('[data-testid^="cal-"][data-date$="-10"]');
+    const date = await cell.getAttribute('data-date');
+    await cell.tap();
+    await expect(page.getByTestId('day-detail')).toContainText('この日の記録はありません');
     await page.getByTestId('history-add').tap();
     await tapDigits(page, '4000');
     await page.getByTestId('cat-外食').tap();
     await page.getByTestId('save').tap();
-    await expect(page.getByTestId('home')).toBeVisible();
 
-    await page.goto('./#/history');
-    await page.getByTestId('month-prev').tap();
+    // 保存するとカレンダーの同じ日に戻り、マスに収支が出る
+    await expect(page.getByTestId('history')).toBeVisible();
     await expect(page.getByTestId('month-label')).toHaveText(label!);
-    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await expect(page.getByTestId(`cal-${date}`)).toContainText('4,000');
+    await expect(page.getByTestId('day-net')).toHaveText('−¥4,000');
+    await expect(page.getByTestId('cal-expense')).toHaveText('¥4,000');
+
+    // 記録を押して直すと、同じ日に戻る
     await page.getByTestId('history-row').tap();
     await tapDigits(page, '4500');
     await page.getByTestId('save').tap();
     await expect(page.getByTestId('history')).toBeVisible();
-    await page.goto('./#/history');
-    await page.getByTestId('month-prev').tap();
     await expect(page.getByTestId('history-row')).toContainText('¥4,500');
+
+    // 収入も追加できる
+    await page.getByTestId('history-add-income').tap();
+    await tapDigits(page, '10000');
+    await page.getByTestId('cat-臨時収入').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('history')).toBeVisible();
+    await expect(page.getByTestId('day-net')).toHaveText('+¥5,500');
+    await expect(page.getByTestId(`cal-${date}`)).toContainText('+5,500');
 
     // 今月 3,000 使うと、サマリの外食（食費）に前月比が出る
     await record(page, '3000', '外食');

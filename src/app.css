@@ -297,3 +297,36 @@ label.field { min-width: 0; }
 .sub-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 6px 0; color: inherit; text-decoration: none; text-align: left; border-bottom: 1px solid var(--line); }
 .sub-row:last-child { border-bottom: 0; }
 .sub-row .ico { color: var(--faint); }
+
+/* ---- 履歴カレンダー ---- */
+.cal-total { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.cal-total .net { grid-column: 1 / -1; flex-direction: row !important; align-items: baseline; justify-content: space-between; }
+.cal-total .net b { font-size: 30px; }
+.cal-total > div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cal-total b { font-family: var(--display); font-weight: 400; font-size: 19px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-total b.neg, .day-net.neg { color: var(--accent); }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal-wd { font-family: var(--mono); font-size: 10px; text-align: center; color: var(--muted); padding: 2px 0 6px; }
+.cal-wd.sun { color: var(--accent); }
+.cal-wd.sat { color: #8fb4d9; }
+.cal-cell { min-height: 54px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding: 5px 4px 6px; min-width: 0; color: var(--ink); transition: background .1s, border-color .1s; }
+.cal-cell.empty { background: transparent; border-color: transparent; }
+.cal-cell:active { background: var(--surface-2); }
+.cal-cell.today { border-color: var(--ink-2); }
+.cal-cell.future { opacity: .55; }
+.cal-cell.on { border-color: var(--accent); background: rgba(255, 91, 36, 0.08); opacity: 1; }
+.cal-day { font-family: var(--mono); font-size: 11px; color: var(--ink-2); text-align: left; }
+.cal-cell.today .cal-day { color: var(--ink); font-weight: 700; }
+.cal-net { font-family: var(--display); font-size: 13px; line-height: 1; text-align: right; letter-spacing: .01em; white-space: nowrap; overflow: hidden; }
+.cal-net.neg { color: var(--chart); }
+.cal-net.pos { color: var(--good); }
+.cal-net.zero { color: var(--muted); }
+.day-card { margin-top: 14px; }
+.day-title { font-size: 22px; font-weight: 800; margin-top: 2px; }
+.day-net { font-family: var(--display); font-size: 30px; line-height: 1; }
+.day-net.pos { color: var(--good); }
+.day-items .list-item { padding: 11px 0; min-height: 0; }
+@media (max-width: 360px) { .cal-net { font-size: 11px; } .cal-cell { min-height: 48px; } }
+
+.day-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.day-actions .btn { padding: 0 8px; white-space: nowrap; font-size: 15px; }
