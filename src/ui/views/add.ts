@@ -1,5 +1,6 @@
 // クイック記録（F01）: 金額テンキー → 中分類 → 保存。日付は今日、支払い手段は前回と同じ。
 // 上の切り替えで「収入」にすると、カテゴリが収入用（給与・賞与など）に変わる。
+// コピー（#/add?copy=<id>）: 既存の記録と同じ金額・カテゴリ・支払い手段・メモを入れた状態で開く。日付は今日。
 
 import { h } from '../dom';
 import { group, yen } from '../../lib/money';
@@ -22,18 +23,21 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   if (route.path === '/edit' && !editing) {
     return h('div', { 'data-testid': 'edit-missing' }, h('h1', null, '記録が見つかりません'), h('p', { class: 'muted' }, '削除されたか、別の端末でまだ同期されていない可能性があります。'), h('a', { class: 'btn big', href: '#/' }, 'ホームへ'));
   }
-  let digits = editing ? String(editing.amount) : route.params.get('amount')?.replace(/\D/g, '').slice(0, MAX_DIGITS) ?? '';
-  let mode: 'expense' | 'income' = editing ? editing.type : route.params.get('type') === 'income' ? 'income' : 'expense';
+  // コピー元（新しい記録として保存する。元の記録は変わらない）
+  const source = !editing && route.params.get('copy') ? store.liveTransactions.find((t) => t.id === route.params.get('copy')) : undefined;
+  const base = editing ?? source;
+  let digits = base ? String(base.amount) : route.params.get('amount')?.replace(/\D/g, '').slice(0, MAX_DIGITS) ?? '';
+  let mode: 'expense' | 'income' = base ? base.type : route.params.get('type') === 'income' ? 'income' : 'expense';
   const list = () => (mode === 'income' ? store.incomeCategories : store.quickCategories);
   const catParam = route.params.get('cat');
   let selected: Category | null = catParam
     ? [...store.quickCategories, ...store.incomeCategories].find((c) => c.name === catParam) ?? null
     : null;
-  if (editing) selected = store.categories.find((c) => c.id === editing.category_id) ?? null;
+  if (base) selected = store.categories.find((c) => c.id === base.category_id) ?? null;
   if (selected?.kind === 'income') mode = 'income';
-  let extraSelected: Category | null = editing ? selected : null; // 「その他…」から選んだもの（上位に無い場合）
+  let extraSelected: Category | null = base ? selected : null; // 「その他…」から選んだもの（上位に無い場合）
   let saving = false;
-  let freshEdit = !!editing;
+  let freshEdit = !!base;
 
   const period = periodFor(new Date(), store.settings.month_start_day);
   const stats = statsFor(store.transactions, store.categories, period);
@@ -44,7 +48,10 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     h('div', { class: 'top' },
       h('a', { href: '#/', 'data-testid': 'to-home', style: 'text-decoration:none' }, icon('back'), `${period.label} `, h('span', { class: 'num' }, yen(stats.variableTotal))),
       editing
-        ? h('button', { type: 'button', class: 'btn sm danger', 'data-testid': 'edit-delete', onClick: () => void remove() }, icon('trash'), '削除')
+        ? h('div', { class: 'row', style: 'gap:8px' },
+            h('a', { class: 'btn sm', href: `#/add?copy=${editing.id}`, 'data-testid': 'edit-copy', style: 'text-decoration:none' }, icon('copy'), 'コピー'),
+            h('button', { type: 'button', class: 'btn sm danger', 'data-testid': 'edit-delete', onClick: () => void remove() }, icon('trash'), '削除'),
+          )
         : h('span', null, `${toDateString(new Date()).slice(5).replace('-', '/')} 今日`),
     ),
   );
@@ -71,9 +78,9 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   const dateToSave = (): string => (fixedDate || dateTouched ? dateInput.value || toDateString(new Date()) : toDateString(new Date()));
   const pmSelect = h('select', { class: 'input', 'data-testid': 'payment-method' });
   for (const p of store.activePaymentMethods) {
-    pmSelect.appendChild(h('option', { value: p.id, selected: p.id === (editing ? editing.payment_method_id : store.defaultPaymentMethodId) }, p.name));
+    pmSelect.appendChild(h('option', { value: p.id, selected: p.id === (base?.payment_method_id ?? store.defaultPaymentMethodId) }, p.name));
   }
-  const memoInput = h('input', { class: 'input', type: 'text', placeholder: 'メモ（任意）', 'data-testid': 'memo', autocomplete: 'off', value: editing?.memo ?? '' });
+  const memoInput = h('input', { class: 'input', type: 'text', placeholder: 'メモ（任意）', 'data-testid': 'memo', autocomplete: 'off', value: base?.memo ?? '' });
   const summary = h('summary', null, '詳細（日付・支払い手段・メモ）');
   const details = h('details', { class: 'details' },
     summary,
@@ -245,7 +252,11 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   }
 
   setMode(mode);
-  if (!editing && dateParam && dateParam !== toDateString(new Date())) {
+  if (source) {
+    root.classList.add('copying');
+    const pmName = mode === 'expense' ? store.paymentMethods.find((p) => p.id === pmSelect.value)?.name : undefined;
+    summary.textContent = `詳細（コピー・今日${pmName ? '・' + pmName : ''}${source.memo ? '・' + source.memo : ''}）`;
+  } else if (!editing && dateParam && dateParam !== toDateString(new Date())) {
     summary.textContent = `詳細（${dateParam.slice(5).replace('-', '/')} に記録）`;
   }
   if (editing) {

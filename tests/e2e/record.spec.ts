@@ -236,4 +236,48 @@ test.describe('クイック記録（F01）とホーム（F02）', () => {
     await expect(page.getByTestId('variable-total')).toHaveText('¥0');
     await expect(page.getByTestId('income-total')).toHaveText('+¥5,000');
   });
+
+  test('記録のコピー: 最近の記録・修正画面・履歴から、同じ内容を今日の日付で新しく記録できる', async ({ page }) => {
+    await openApp(page, '#/add');
+    await tapDigits(page, '1200');
+    await page.getByTestId('cat-外食').tap();
+    await page.locator('details summary').tap();
+    await page.getByTestId('payment-method').selectOption({ label: 'PayPay' });
+    await page.getByTestId('memo').fill('ランチ');
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥1,200');
+
+    // 最近の記録からコピー: 金額・カテゴリ・支払い手段・メモが入っていて、そのまま保存できる
+    await page.getByTestId('recent-copy').first().tap();
+    await expect(page.getByTestId('amount')).toHaveText('¥1,200');
+    await expect(page.getByTestId('cat-外食')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('memo')).toHaveValue('ランチ');
+    expect(await page.getByTestId('payment-method').locator('option:checked').textContent()).toBe('PayPay');
+    await expect(page.getByTestId('save')).toHaveText('外食 ¥1,200 を保存');
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥2,400');
+    await expect(page.getByTestId('recent-row')).toHaveCount(2);
+
+    // 修正画面からコピーし、金額だけ変える（元の記録は変わらない）
+    await page.getByTestId('edit-link').first().tap();
+    await page.getByTestId('edit-copy').tap();
+    await expect(page.getByTestId('edit-delete')).toHaveCount(0);
+    await tapDigits(page, '500');
+    await expect(page.getByTestId('amount')).toHaveText('¥500');
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥2,900');
+
+    // 履歴の日付の明細からコピーすると、保存後に履歴へ戻る
+    const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+    await page.goto('./#/history');
+    await page.getByTestId(`cal-${today}`).tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(3);
+    await page.getByTestId('history-copy').first().tap();
+    await expect(page.getByTestId('save')).toBeEnabled();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('history')).toBeVisible();
+    await expect(page.getByTestId('history-row')).toHaveCount(4);
+  });
 });
