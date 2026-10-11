@@ -110,13 +110,15 @@ function renderPanel(ctx: AppContext, el: HTMLElement, period: Period, date: str
         const cat = categoryById(store.categories, t.category_id);
         const parent = cat?.parent_id ? categoryById(store.categories, cat.parent_id) : undefined;
         const pm = store.paymentMethods.find((p) => p.id === t.payment_method_id);
-        return h('a', { class: 'list-item row-link', href: `#/edit?id=${t.id}`, 'data-testid': 'history-row' },
-          h('div', { class: 'grow' },
-            h('div', null, cat?.name ?? '未分類', t.source === 'recurring' ? h('span', { class: 'tag' }, '自動') : null),
-            h('div', { class: 'recent-meta' }, [parent?.name, t.memo, pm?.name].filter(Boolean).join(' · ') || ' '),
+        return h('div', { class: 'list-item' },
+          h('a', { class: 'grow row row-link', href: `#/edit?id=${t.id}`, 'data-testid': 'history-row', style: 'flex-direction:row;align-items:center;gap:10px;min-width:0' },
+            h('div', { class: 'grow', style: 'min-width:0' },
+              h('div', null, cat?.name ?? '未分類', t.source === 'recurring' ? h('span', { class: 'tag' }, '自動') : null),
+              h('div', { class: 'recent-meta' }, [parent?.name, t.memo, pm?.name].filter(Boolean).join(' · ') || ' '),
+            ),
+            h('span', { class: 'amount' + (t.type === 'income' ? ' is-income' : ''), style: 'font-size:19px' }, `${t.type === 'income' ? '+' : ''}${yen(t.amount)}`),
           ),
-          h('span', { class: 'amount' + (t.type === 'income' ? ' is-income' : ''), style: 'font-size:19px' }, `${t.type === 'income' ? '+' : ''}${yen(t.amount)}`),
-          icon('chevron'),
+          h('a', { class: 'btn icon-btn', href: `#/add?copy=${t.id}&ret=${encodeURIComponent(back)}`, 'data-testid': 'history-copy', 'aria-label': `${cat?.name ?? '記録'} ${yen(t.amount)} をコピーして記録`, title: 'コピー' }, icon('copy')),
         );
       }),
     ),

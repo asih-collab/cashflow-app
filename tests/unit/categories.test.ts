@@ -39,6 +39,10 @@ describe('カテゴリ初期セット', () => {
     expect(q).not.toContain('デート');
     expect(q).not.toContain('外食');
   });
+  it('教養・教育に資格試験がある', () => {
+    const edu = parentsOf(all).find((p) => p.name === '教養・教育')!;
+    expect(childrenOf(all, edu.id).map((c) => c.name)).toEqual(['書籍（学習）', 'セミナー', '資格試験']);
+  });
   it('childrenOf は親配下だけ', () => {
     const food = parentsOf(all).find((p) => p.name === '食費')!;
     expect(childrenOf(all, food.id).map((c) => c.name).sort()).toEqual(['カフェ', 'コンビニ', '外食', '食料品'].sort());

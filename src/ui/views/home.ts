@@ -146,6 +146,7 @@ export function renderHome(ctx: AppContext): HTMLElement {
             h('div', { class: 'recent-meta' }, `${t.date.slice(5).replace('-', '/')}${pm ? ' · ' + pm.name : ''}`),
           ),
           h('span', { class: 'amount' + (t.type === 'income' ? ' is-income' : '') }, t.type === 'income' ? `+${yen(t.amount)}` : yen(t.amount)),
+          h('a', { class: 'btn icon-btn', href: `#/add?copy=${t.id}`, 'data-testid': 'recent-copy', 'aria-label': `${cat?.name ?? '記録'} ${yen(t.amount)} をコピーして記録`, title: 'コピー' }, icon('copy')),
           h('button', {
             class: 'btn danger icon-btn', type: 'button', 'aria-label': '削除', title: '削除',
             onClick: async () => {
