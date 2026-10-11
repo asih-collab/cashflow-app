@@ -61,7 +61,14 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
 
   // 詳細（日付・支払い手段・メモ）は折りたたみ
   const dateParam = route.params.get('date');
-  const dateInput = h('input', { class: 'input', type: 'date', value: editing?.date ?? (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : toDateString(new Date())), 'data-testid': 'date' });
+  const fixedDate = editing?.date ?? (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : null);
+  const dateInput = h('input', { class: 'input', type: 'date', value: fixedDate ?? toDateString(new Date()), 'data-testid': 'date' });
+  // 日付を自分で変えていなければ、保存した瞬間の「今日」で記録する。
+  // （ホーム画面アプリは裏に残るので、前日に開いた記録画面のまま翌日に保存すると前日の日付になってしまうため）
+  let dateTouched = false;
+  dateInput.addEventListener('input', () => { dateTouched = true; });
+  dateInput.addEventListener('change', () => { dateTouched = true; });
+  const dateToSave = (): string => (fixedDate || dateTouched ? dateInput.value || toDateString(new Date()) : toDateString(new Date()));
   const pmSelect = h('select', { class: 'input', 'data-testid': 'payment-method' });
   for (const p of store.activePaymentMethods) {
     pmSelect.appendChild(h('option', { value: p.id, selected: p.id === (editing ? editing.payment_method_id : store.defaultPaymentMethodId) }, p.name));
@@ -204,7 +211,7 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     const t = await store.addTransaction({
       amount: a,
       categoryId: selected.id,
-      date: dateInput.value || toDateString(new Date()),
+      date: dateToSave(),
       paymentMethodId: mode === 'income' ? null : pmSelect.value || null,
       memo: memoInput.value.trim(),
       type: mode,

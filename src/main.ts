@@ -99,7 +99,9 @@ async function boot(): Promise<void> {
     );
   }
 
+  let renderedDay = '';
   function render(): void {
+    renderedDay = new Date().toDateString();
     const route = parseHash(location.hash);
     ctx.route = route;
     ctx.busy.entering = false;
@@ -148,6 +150,8 @@ async function boot(): Promise<void> {
   window.addEventListener('online', () => void syncer.sync());
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    // 日付が変わってから戻ってきたら、「今日」を描き直す（入力の途中なら邪魔しない）
+    if (renderedDay !== new Date().toDateString() && !ctx.busy.entering) render();
     void store.applyRecurring(); // 月が変わっていたら、その月の固定費・給料を記録
     void syncer.sync();
   });
