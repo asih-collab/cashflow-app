@@ -115,4 +115,21 @@ describe('AppStore', () => {
     await s.deleteTransaction(t.id);
     expect(await s.updateTransaction(t.id, { amount: 1 })).toBeUndefined();
   });
+
+  it('リボ残高: 追加・更新で推移が残り、古い日付で直しても最新の残高は巻き戻らない。削除もできる', async () => {
+    const s = await fresh('debt');
+    const d = await s.saveDebt({ name: 'カードA', balance: 300000, balance_date: '2026-10-01', monthly_payment: 30000, annual_rate: 15 });
+    expect(s.activeDebts).toHaveLength(1);
+    await s.saveDebt({ id: d.id, name: 'カードA', balance: 275000, balance_date: '2026-11-01', monthly_payment: 30000, annual_rate: 15 });
+    expect(s.activeDebts[0]!.balance).toBe(275000);
+    expect(s.activeDebts[0]!.history.map((p) => p.balance)).toEqual([300000, 275000]);
+    // 前の月の値を直しただけなら、最新は 11/1 のまま
+    await s.saveDebt({ id: d.id, name: 'カードA', balance: 299000, balance_date: '2026-10-01', monthly_payment: 30000, annual_rate: 15 });
+    expect(s.activeDebts[0]!.balance).toBe(275000);
+    expect(s.activeDebts[0]!.balance_date).toBe('2026-11-01');
+    expect(s.activeDebts[0]!.history).toEqual([{ date: '2026-10-01', balance: 299000 }, { date: '2026-11-01', balance: 275000 }]);
+    await s.deleteDebt(d.id);
+    expect(s.activeDebts).toHaveLength(0);
+    expect(JSON.parse(s.exportJson()).debts).toHaveLength(1);
+  });
 });

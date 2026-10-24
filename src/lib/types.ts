@@ -92,7 +92,28 @@ export interface Budget {
   deleted_at: string | null;
 }
 
-export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets';
+/** リボ・分割の残高（F08）。カード 1 枚（または分割 1 件）ごと */
+export interface Debt {
+  id: string;
+  name: string;
+  /** balance_date 時点の残高 */
+  balance: number;
+  /** 残高を確認した日（YYYY-MM-DD） */
+  balance_date: string;
+  /** 毎月の返済額（手数料込み） */
+  monthly_payment: number;
+  /** 手数料の年率（%）。例: 15 */
+  annual_rate: number;
+  /** これまでに確認した残高（推移の表示用。古い順） */
+  history: { date: string; balance: number }[];
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'debts';
 
 export interface Session {
   access_token: string;

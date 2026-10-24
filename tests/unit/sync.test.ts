@@ -88,7 +88,7 @@ describe('同期', () => {
     const before = server.calls.length;
     await b.syncer.sync();
     const gets = server.calls.slice(before).filter((c) => c.method === 'GET');
-    expect(gets.length).toBe(6); // テーブルごとに 1 回ずつ、いずれも空
+    expect(gets.length).toBe(7); // テーブルごとに 1 回ずつ、いずれも空
     expect(b.store.liveTransactions).toHaveLength(2);
   });
 

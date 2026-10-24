@@ -47,3 +47,14 @@
 5. アプリ側のログイン画面をコード入力優先に切り替える（`src/ui/views/login.ts`。文面にコードが載るようになった後）
 
 Gmail の「アプリパスワード」（smtp.gmail.com:465）でも動くが、Gmail 側の送信上限と規約に注意。
+
+## 通知（Web プッシュ）の準備
+
+`SUPABASE_PROJECT_REF=<ref> node scripts/setup-push.mjs` で次をまとめて行う（何度実行してもよい。鍵を作り直すときは `--rotate`。作り直すと全端末で通知をオンにし直す必要がある）。
+
+1. `migrations/0007_push.sql`（端末の購読 `push_subscriptions`、送信記録 `notification_log`、公開鍵を返す関数 `push_public_key()`）
+2. 通知用の鍵（VAPID）を作り、公開鍵を `private.app_config` に、秘密鍵と合言葉を Edge Function のシークレット（`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_JWK` / `VAPID_SUBJECT` / `CRON_SECRET`）に置く。呼び先 URL と合言葉は Vault（`notify_url` / `notify_cron_secret`）にも置く
+3. Edge Function `notify` を配備（`verify_jwt: false`。定期実行は合言葉、テスト通知は本人のログイン情報で確かめる）
+4. `migrations/0008_push_cron.sql`（pg_cron の予定: 11:00 UTC = 20:00 JST 振り返り、12:00 UTC = 21:00 JST リマインド）
+
+動作確認は SQL から `select private.call_notify('reminder');` → `select * from net._http_response order by id desc limit 1;`。

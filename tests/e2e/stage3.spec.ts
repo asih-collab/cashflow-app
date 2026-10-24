@@ -1,0 +1,67 @@
+import { expect, test } from './fixtures';
+import { openApp } from './helpers';
+
+test.describe('段階 3: リボ残高・ショートカット・通知', () => {
+  test('リボ残高: カードを登録すると完済見込みと上乗せの効果が出て、残高を更新すると推移が残る。ホームにも出る', async ({ page }) => {
+    await openApp(page, '#/settings');
+    await page.getByTestId('go-debts').tap();
+    await expect(page.getByTestId('debts')).toBeVisible();
+    await page.getByTestId('debt-add').tap();
+    await page.getByTestId('debt-name').fill('カードA');
+    await page.getByTestId('debt-balance').fill('300000');
+    await page.getByTestId('debt-monthly').fill('30000');
+    await page.getByTestId('debt-save').tap();
+
+    await expect(page.getByTestId('debt-total')).toHaveText('¥300,000');
+    await expect(page.getByTestId('debt-payoff')).toContainText('年');
+    await expect(page.getByTestId('debt-yearly-fee')).toHaveText('¥45,000'); // 300,000 × 15% ÷ 12 × 12
+    await expect(page.getByTestId('debt-extra-msg')).toContainText('か月早く');
+    await page.getByTestId('debt-extra-30000').tap();
+    await expect(page.getByTestId('debt-extra-msg')).toContainText('¥30,000 多く返すと');
+    await expect(page.getByTestId('debt-chart').locator('svg path.line')).toHaveCount(2);
+
+    // 2 枚目（返済額が手数料以下）→ 終わらない警告
+    await page.getByTestId('debt-add').tap();
+    await page.getByTestId('debt-name').fill('カードB');
+    await page.getByTestId('debt-balance').fill('1000000');
+    await page.getByTestId('debt-monthly').fill('10000');
+    await page.getByTestId('debt-save').tap();
+    await expect(page.getByTestId('debt-total')).toHaveText('¥1,300,000');
+    await expect(page.getByTestId('debt-payoff')).toHaveText('終わらない');
+
+    // 残高を更新（別の日付）→ 推移が 2 件
+    await page.getByTestId('debt-カードA').tap();
+    await page.getByTestId('debt-balance').fill('270000');
+    await page.getByTestId('debt-date').fill('2099-01-01');
+    await page.getByTestId('debt-save').tap();
+    await page.getByTestId('debt-カードA').tap();
+    await expect(page.getByTestId('debt-history').locator('.list-item')).toHaveCount(2);
+    await page.goto('./#/');
+    await expect(page.getByTestId('home-debt')).toContainText('¥1,270,000');
+  });
+
+  test('ショートカット: #/add?amount=&cat=&save=1 で開くとそのまま保存され、開き直しても二重にならない', async ({ page }) => {
+    await openApp(page, '#/add?amount=1200&cat=デート&save=1');
+    await expect(page.getByTestId('toast')).toContainText('デート ¥1,200 を記録');
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('variable-total')).toHaveText('¥1,200');
+    await page.goBack().catch(() => {});
+    await page.reload();
+    await page.goto('./#/');
+    await expect(page.getByTestId('variable-total')).toHaveText('¥1,200');
+    await expect(page.getByTestId('recent-row')).toHaveCount(1);
+  });
+
+  test('ショートカット: 予算がある大分類なら保存後に「残り」を出す', async ({ page }) => {
+    await openApp(page, '#/budget');
+    await page.getByTestId('budget-交際費').fill('30000');
+    await page.getByTestId('budget-交際費').blur();
+    await page.goto('./#/add?amount=2000&cat=デート&save=1');
+    await expect(page.getByTestId('toast').filter({ hasText: 'デート ¥2,000' })).toContainText('交際費 残り ¥28,000');
+  });
+
+  test('通知: iPhone の Safari（ホーム画面に追加していない）では追加の案内を出す', async ({ page }) => {
+    await openApp(page, '#/settings');
+    await expect(page.getByTestId('push-card')).toContainText('ホーム画面に追加');
+  });
+});

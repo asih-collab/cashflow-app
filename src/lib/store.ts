@@ -4,7 +4,7 @@ import type { Db } from './db';
 import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
 import { toDateString } from './period';
-import type { Budget, Category, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
+import type { Budget, Category, Debt, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
 import { dueRecurringTransactions, monthKey, postingDate } from './recurring';
 import { budgetId } from './budget';
 import type { Syncer } from './sync';
@@ -48,6 +48,7 @@ export class AppStore {
   transactions: Transaction[] = [];
   recurringRules: RecurringRule[] = [];
   budgets: Budget[] = [];
+  debts: Debt[] = [];
   settings: Settings = { ...DEFAULT_SETTINGS };
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -93,6 +94,7 @@ export class AppStore {
     this.transactions = await this.db.getAll<Transaction>('transactions');
     this.recurringRules = await this.db.getAll<RecurringRule>('recurring_rules');
     this.budgets = await this.db.getAll<Budget>('budgets');
+    this.debts = await this.db.getAll<Debt>('debts');
     this.settings = { ...DEFAULT_SETTINGS, ...((await this.db.get<Settings>('settings', 'me')) ?? {}) };
     this.emit();
   }
@@ -189,6 +191,55 @@ export class AppStore {
       this.budgets.push(b);
     }
     await this.save('budgets', b);
+    this.emit();
+    this.requestSync();
+  }
+
+  // ---- リボ・分割の残高（F08） ------------------------------------------------
+
+  get activeDebts(): Debt[] {
+    return this.debts.filter((d) => !d.deleted_at && d.is_active).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+  }
+
+  /** 追加・編集。残高や日付が変わったら推移に 1 点足す（同じ日は置き換え） */
+  async saveDebt(input: { id?: string; name: string; balance: number; balance_date: string; monthly_payment: number; annual_rate: number }): Promise<Debt> {
+    const now = nowIso();
+    const existing = input.id ? this.debts.find((d) => d.id === input.id) : undefined;
+    const balance = Math.max(0, Math.trunc(input.balance) || 0);
+    const point = { date: input.balance_date, balance };
+    const history = [...(existing?.history ?? []).filter((p) => p.date !== point.date), point].sort((a, b) => a.date.localeCompare(b.date));
+    const d: Debt = {
+      id: existing?.id ?? uuid(),
+      name: input.name.trim(),
+      balance,
+      balance_date: input.balance_date,
+      monthly_payment: Math.max(0, Math.trunc(input.monthly_payment) || 0),
+      annual_rate: Math.max(0, Math.round((Number(input.annual_rate) || 0) * 100) / 100),
+      history,
+      is_active: true,
+      sort_order: existing?.sort_order ?? this.debts.length,
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+      deleted_at: null,
+    };
+    // 最新の残高は、推移の中で一番新しい日のもの（古い日付で直した場合に巻き戻らないように）
+    const latest = d.history[d.history.length - 1]!;
+    d.balance = latest.balance;
+    d.balance_date = latest.date;
+    if (existing) Object.assign(existing, d);
+    else this.debts.push(d);
+    await this.save('debts', d);
+    this.emit();
+    this.requestSync();
+    return d;
+  }
+
+  async deleteDebt(id: string): Promise<void> {
+    const d = this.debts.find((x) => x.id === id);
+    if (!d) return;
+    const now = nowIso();
+    Object.assign(d, { deleted_at: now, updated_at: now });
+    await this.save('debts', d);
     this.emit();
     this.requestSync();
   }
@@ -407,7 +458,7 @@ export class AppStore {
 
   exportJson(): string {
     return JSON.stringify(
-      { exported_at: nowIso(), categories: this.categories, payment_methods: this.paymentMethods, transactions: this.transactions, settings: this.settings },
+      { exported_at: nowIso(), categories: this.categories, payment_methods: this.paymentMethods, transactions: this.transactions, settings: this.settings, recurring_rules: this.recurringRules, budgets: this.budgets, debts: this.debts },
       null,
       2,
     );

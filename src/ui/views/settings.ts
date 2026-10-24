@@ -2,7 +2,8 @@ import { h } from '../dom';
 import type { AppContext } from '../context';
 import type { SyncState } from '../../lib/sync';
 import { toast } from '../toast';
-import { INSTALL_STEPS } from '../install';
+import { INSTALL_STEPS, isIOS, isStandalone } from '../install';
+import { disablePush, enablePush, loadPrefs, pushSupport, savePrefs, sendTestPush, type PushPrefs } from '../../lib/push';
 import { icon } from '../icons';
 
 export function syncStatusText(s: SyncState): string {
@@ -61,9 +62,14 @@ export function renderSettings(ctx: AppContext): HTMLElement {
   root.appendChild(h('h2', null, '使い方'));
   root.appendChild(prefs);
 
+  // ---- 通知（F09 の C・E） ----
+  root.appendChild(h('h2', null, '通知'));
+  root.appendChild(renderPushCard(ctx));
+
   // ---- カテゴリ・支払い手段 ----
   const lists = h('div', { class: 'card' });
   lists.appendChild(h('a', { class: 'list-item', href: '#/recurring', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-recurring' }, h('span', { class: 'grow' }, '固定費・定期の収入（毎月の自動記録）'), h('span', { class: 'muted' }, icon('chevron'))));
+  lists.appendChild(h('a', { class: 'list-item', href: '#/debts', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-debts' }, h('span', { class: 'grow' }, 'リボ・分割の残高（完済の見込み）'), h('span', { class: 'muted' }, icon('chevron'))));
   lists.appendChild(h('a', { class: 'list-item', href: '#/budget', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-budget-settings' }, h('span', { class: 'grow' }, '予算'), h('span', { class: 'muted' }, icon('chevron'))));
   lists.appendChild(h('a', { class: 'list-item', href: '#/categories', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-categories' }, h('span', { class: 'grow' }, 'カテゴリ（追加・名前の変更・非表示）'), h('span', { class: 'muted' }, icon('chevron'))));
   root.appendChild(h('h2', null, '家計の設定'));
@@ -109,4 +115,73 @@ export function renderSettings(ctx: AppContext): HTMLElement {
   ));
 
   return root;
+}
+
+/** 通知の設定。夜 9 時の記録リマインド（記録ゼロの日だけ）と、月末の振り返り */
+function renderPushCard(ctx: AppContext): HTMLElement {
+  const card = h('div', { class: 'card', 'data-testid': 'push-card' });
+  const support = pushSupport(isStandalone(), isIOS());
+  if (support === 'needs-install') {
+    card.appendChild(h('p', { class: 'small', style: 'margin:0' }, '通知は「ホーム画面に追加」したアプリでだけ受け取れます。下の「ホーム画面に追加」の手順で追加し、ホーム画面のアイコンから開いてこの画面で設定してください。'));
+    return card;
+  }
+  if (support === 'unsupported') {
+    card.appendChild(h('p', { class: 'small muted', style: 'margin:0' }, 'この端末・ブラウザは通知に対応していません（iPhone は iOS 16.4 以降で、ホーム画面に追加したアプリから使えます）。'));
+    return card;
+  }
+  if (!ctx.sessions.get() || !ctx.client) {
+    card.appendChild(h('p', { class: 'small muted', style: 'margin:0' }, '通知を使うにはログインしてください（記録があったかどうかをサーバーで確かめて、記録ゼロの日だけ知らせるため）。'));
+    return card;
+  }
+  const client = ctx.client;
+  const { syncer } = ctx;
+  const body = h('div', null, h('div', { class: 'muted small' }, '確認中…'));
+  card.appendChild(body);
+
+  const draw = (prefs: PushPrefs | null) => {
+    body.replaceChildren();
+    if (!prefs) {
+      body.append(
+        h('p', { class: 'small', style: 'margin:0 0 12px' }, '夜 9 時に、その日の記録が 1 件もないときだけ知らせます。予算の月の最終日の夜 8 時には、振り返りの案内が届きます。'),
+        h('button', { class: 'btn primary', type: 'button', 'data-testid': 'push-enable', onClick: async (e: Event) => {
+          const b = e.currentTarget as HTMLButtonElement;
+          b.disabled = true;
+          try {
+            draw(await enablePush(client, syncer));
+            toast('通知をオンにしました。「テスト通知」で届くか確かめられます');
+          } catch (err) {
+            toast(err instanceof Error ? err.message : String(err), { durationMs: 6000 });
+            b.disabled = false;
+          }
+        } }, '通知をオンにする'),
+      );
+      return;
+    }
+    const toggle = (key: keyof PushPrefs, label: string, sub: string) =>
+      h('label', { class: 'list-item', style: 'border-top:0' },
+        h('span', { class: 'grow' }, label, h('div', { class: 'muted small' }, sub)),
+        h('input', { class: 'toggle', type: 'checkbox', checked: prefs[key], 'data-testid': `push-${key}`, onChange: async (e: Event) => {
+          prefs[key] = (e.target as HTMLInputElement).checked;
+          try { await savePrefs(client, syncer, prefs); } catch (err) { toast(err instanceof Error ? err.message : String(err)); }
+        } }));
+    body.append(
+      toggle('reminder', '記録のリマインド', '夜 9 時。その日の記録がゼロのときだけ'),
+      toggle('review', '月末の振り返り', '予算の月の最終日の夜 8 時'),
+      h('div', { class: 'row', style: 'gap:8px;margin-top:10px;flex-wrap:wrap' },
+        h('button', { class: 'btn sm', type: 'button', 'data-testid': 'push-test', onClick: async () => {
+          try {
+            const r = await sendTestPush(client, syncer);
+            toast(r.sent > 0 ? 'テスト通知を送りました。数秒で届きます' : `送れませんでした${r.errors?.length ? `（${r.errors[0]}）` : '。通知をいったんオフにして、もう一度オンにしてください'}`, { durationMs: 6000 });
+          } catch (err) { toast(err instanceof Error ? err.message : String(err)); }
+        } }, 'テスト通知'),
+        h('button', { class: 'btn sm danger', type: 'button', 'data-testid': 'push-disable', onClick: async () => {
+          await disablePush(client, syncer);
+          toast('この端末の通知をオフにしました');
+          draw(null);
+        } }, '通知をオフにする'),
+      ),
+    );
+  };
+  loadPrefs(client, syncer).then(draw, () => draw(null));
+  return card;
 }

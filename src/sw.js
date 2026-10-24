@@ -65,3 +65,34 @@ async function staleWhileRevalidate(cacheReq, netReq) {
 }
 
 function event_noop(p) { p.then(() => {}, () => {}); }
+
+// ---- 通知（F09 の C・E）。Supabase の Edge Function `notify` から届く ----
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { title: '家計', body: event.data ? event.data.text() : '' }; }
+  const title = data.title || '家計';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    tag: data.tag || 'cashflow',
+    icon: new URL('./icon-192.png', self.registration.scope).toString(),
+    badge: new URL('./icon-192.png', self.registration.scope).toString(),
+    data: { url: data.url || '#/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(self.registration.scope);
+  target.hash = (event.notification.data && event.notification.data.url) || '#/';
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      if (new URL(c.url).origin === target.origin && 'focus' in c) {
+        await c.focus();
+        if ('navigate' in c) { try { await c.navigate(target.toString()); } catch (e) { /* 別のページのときは開き直す */ } }
+        return;
+      }
+    }
+    await self.clients.openWindow(target.toString());
+  })());
+});

@@ -330,3 +330,25 @@ label.field { min-width: 0; }
 
 .day-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .day-actions .btn { padding: 0 8px; white-space: nowrap; font-size: 15px; }
+
+/* リボ・分割の残高の推移（F08）。今のペース = 朱色の実線、上乗せ = 青の破線（暗い背景で検査済みの 2 色） */
+:root { --chart-2: #3e9be6; }
+.debt-chart-wrap { position: relative; }
+.debt-chart { width: 100%; height: auto; display: block; overflow: visible; touch-action: pan-y; }
+.debt-chart .grid, .debt-chart .axis { stroke: var(--line-strong); stroke-width: 1; shape-rendering: crispEdges; }
+.debt-chart .grid { stroke: var(--line); }
+.debt-chart .tick { font-family: var(--mono); font-size: 9px; letter-spacing: .08em; fill: var(--muted); }
+.debt-chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.debt-chart .line.base { stroke: var(--chart); }
+.debt-chart .line.extra { stroke: var(--chart-2); stroke-dasharray: 5 4; }
+.debt-chart .end, .debt-chart .dot { stroke: var(--surface); stroke-width: 2; }
+.debt-chart .base.end, .debt-chart .dot.base { fill: var(--chart); }
+.debt-chart .extra.end, .debt-chart .dot.extra { fill: var(--chart-2); }
+.debt-chart .cross { stroke: var(--ink-2); stroke-width: 1; opacity: .5; shape-rendering: crispEdges; }
+.debt-chart .hit { fill: transparent; outline: none; }
+.debt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+.debt-legend > span, .debt-tip .row { display: inline-flex; align-items: center; gap: 6px; }
+.debt-legend .lkey, .debt-tip .lkey { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--chart); }
+.debt-legend .lkey.extra, .debt-tip .lkey.extra { border-top: 2px dashed var(--chart-2); }
+.debt-tip { position: absolute; top: 24px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 10px; font-size: 13px; pointer-events: none; min-width: 150px; }
+.debt-tip b { font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: .02em; }

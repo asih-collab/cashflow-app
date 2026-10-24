@@ -26,7 +26,7 @@ export interface SessionStore {
   set(s: Session | null): void;
 }
 
-const TABLES: SyncTable[] = ['categories', 'payment_methods', 'recurring_rules', 'budgets', 'transactions', 'settings'];
+const TABLES: SyncTable[] = ['categories', 'payment_methods', 'recurring_rules', 'budgets', 'debts', 'transactions', 'settings'];
 const PAGE = 1000;
 const TS_FIELDS = ['created_at', 'updated_at', 'deleted_at'];
 
@@ -168,7 +168,8 @@ export class Syncer {
     }
   }
 
-  private async withAuth<T>(fn: (token: string) => Promise<T>): Promise<T> {
+  /** ログイン中のトークンで呼ぶ（期限切れなら更新して 1 回だけ再試行）。通知の設定などでも使う */
+  async withAuth<T>(fn: (token: string) => Promise<T>): Promise<T> {
     try {
       return await fn(await this.token());
     } catch (e) {

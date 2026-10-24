@@ -11,8 +11,9 @@
 | ロジック | 純粋な TypeScript（テスト対象） | `src/lib/`（`period` 予算期間、`stats` 集計・日別、`budget` 予算と残額、`recurring` 毎月の自動計上、`summary` 月次サマリ、`categories` 初期セットと並び、`store` データ操作、`sync` 同期、`supabase` 最小クライアント、`db` IndexedDB） |
 | オフライン | 自前の Service Worker | `src/sw.js`（テンプレート）→ `scripts/build-sw.mjs` が `dist/sw.js` を生成 |
 | データ | IndexedDB（端末が正）+ Supabase（Postgres, RLS） | `supabase/migrations/`、`supabase/README.md` |
+| 通知 | Web プッシュ。Edge Function `notify`（`supabase/functions/notify/`、WebCrypto だけで暗号化と署名）を pg_cron が毎日呼ぶ。端末側は `src/lib/push.ts` と `src/sw.js` の push イベント | `scripts/setup-push.mjs` で鍵・配備・予定を反映 |
 | 公開 | GitHub Pages（`main` への push で GitHub Actions が test → build → `gh-pages` ブランチへ配置。Pages はそのブランチを公開する） | `.github/workflows/deploy.yml` |
-| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=&d=` 履歴（カレンダー。`d` は選んだ日）、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート`（ショートカット用）や `#/add?date=YYYY-MM-DD&type=income&ret=<戻り先>` で値を渡せる（`ret` は保存後の戻り先） | `src/main.ts` |
+| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=&d=` 履歴（カレンダー。`d` は選んだ日）、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/debts?id=` リボ・分割の残高、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート&save=1`（ショートカット用。`save=1` で開いた瞬間に保存）や `#/add?copy=<記録の ID>`（コピー）や `#/add?date=YYYY-MM-DD&type=income&ret=<戻り先>` で値を渡せる（`ret` は保存後の戻り先） | `src/main.ts` |
 
 公開 URL: `https://asih-collab.github.io/cashflow-app/`（`vite.config.ts` の `base` と一致させる）
 
@@ -77,4 +78,5 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 
 段階 1（本リポジトリの現状）: F01 クイック記録、F04 カテゴリ、F02 ホーム（合計版）、F10 ログインと同期、ホーム画面追加の案内
 段階 2（2026-10-03 実装済み）: F05 予算、F06 固定支出・給料の自動計上、F07 月次サマリ、F11 編集・過去日付・履歴
-段階 3: F09 通知、F08 リボ残高、iOS ショートカット、PWA の仕上げ
+段階 3（2026-10-24 実装済み）: F08 リボ残高（`src/lib/debt.ts`）、F09 通知 C・E、iOS ショートカット（`save=1`）
+段階 3.5: F23 改善アドバイス（10 月分が締まってから）

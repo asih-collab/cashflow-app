@@ -227,11 +227,17 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     ctx.busy.entering = false;
     const p = periodFor(new Date(), store.settings.month_start_day);
     const s = statsFor(store.transactions, store.categories, p);
-    const catName = categoryById(store.categories, t.category_id)?.name ?? '';
+    const cat = categoryById(store.categories, t.category_id);
+    const catName = cat?.name ?? '';
+    const bsAfter = budgetStatus(store.budgets, store.transactions, store.categories, periodNow);
+    // 予算がある大分類なら「残り」を出す（06 の 2.3「デート 残り ¥28,000」）
+    const line = t.date >= periodNow.start && t.date <= periodNow.end ? bsAfter.lines.find((l) => l.categoryId === cat?.parent_id && l.budget > 0) : undefined;
     const msg = t.type === 'income'
       ? `${catName} +${yen(t.amount)} を収入として記録 ・ ${p.label}の収入 ${yen(s.incomeTotal)}`
-      : `${catName} ${yen(t.amount)} を記録 ・ ${p.label} ${yen(s.variableTotal)}`;
-    const crossed = crossedThreshold(bsBefore, budgetStatus(store.budgets, store.transactions, store.categories, periodNow));
+      : line
+        ? `${catName} ${yen(t.amount)} を記録 ・ ${line.name} ${line.remaining >= 0 ? `残り ${yen(line.remaining)}` : `${yen(-line.remaining)} 超過`}`
+        : `${catName} ${yen(t.amount)} を記録 ・ ${p.label} ${yen(s.variableTotal)}`;
+    const crossed = crossedThreshold(bsBefore, bsAfter);
     for (const l of crossed) {
       toast(`注意: ${l.name}が予算の ${Math.round(l.ratio * 100)}% に達しました（${l.remaining >= 0 ? `残り ${yen(l.remaining)}` : `${yen(-l.remaining)} 超過`}）`, { durationMs: 6000 });
     }
@@ -252,6 +258,16 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   }
 
   setMode(mode);
+  // iOS ショートカットから「金額・カテゴリ・save=1」で開いたら、そのまま保存する（ウィジェット代替、06 の 2.4）。
+  // 再読み込みで二重に保存しないよう、先に URL から save を外す
+  if (!editing && !source && route.params.get('save') === '1') {
+    const params = new URLSearchParams(route.params);
+    params.delete('save');
+    history.replaceState(null, '', `${location.pathname}${location.search}#/add?${params.toString()}`);
+    if (amount() > 0 && selected) queueMicrotask(() => void save());
+    // cat が空なら、金額だけ入った状態でカテゴリを選んでもらう（ショートカットの「その他」）
+    else if (route.params.get('cat')) toast('ショートカットの金額かカテゴリが読み取れませんでした。選んで保存してください');
+  }
   if (source) {
     root.classList.add('copying');
     const pmName = mode === 'expense' ? store.paymentMethods.find((p) => p.id === pmSelect.value)?.name : undefined;

@@ -1,9 +1,9 @@
 // IndexedDB の薄いラッパー。端末内のデータが「正」で、保存した記録は通信断でも消えない。
 
-export type StoreName = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'outbox' | 'meta';
+export type StoreName = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'debts' | 'outbox' | 'meta';
 
 const DB_NAME = 'cashflow';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export class Db {
   private dbp: Promise<IDBDatabase> | null = null;
@@ -27,6 +27,7 @@ export class Db {
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
         if (!db.objectStoreNames.contains('recurring_rules')) db.createObjectStore('recurring_rules', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('budgets')) db.createObjectStore('budgets', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('debts')) db.createObjectStore('debts', { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);

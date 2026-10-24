@@ -113,6 +113,20 @@ export class SupabaseClient {
       body: JSON.stringify(rows),
     });
   }
+
+  async remove(table: string, query: string, token: string): Promise<void> {
+    await this.call(`/rest/v1/${table}?${query}`, { method: 'DELETE', token, headers: { Prefer: 'return=minimal' } });
+  }
+
+  /** データベースの関数を呼ぶ（POST /rest/v1/rpc/<name>） */
+  async rpc<T>(name: string, args: Record<string, unknown>, token: string): Promise<T> {
+    return this.call<T>(`/rest/v1/rpc/${name}`, { method: 'POST', token, body: JSON.stringify(args) });
+  }
+
+  /** Edge Function を呼ぶ */
+  async invoke<T>(name: string, body: unknown, token: string): Promise<T> {
+    return this.call<T>(`/functions/v1/${name}`, { method: 'POST', token, body: JSON.stringify(body) });
+  }
 }
 
 interface RawSession {
