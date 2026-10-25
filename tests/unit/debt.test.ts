@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysSinceBalance, debtPlan, monthLabel, monthlyInterest, planDebt, totalPlan } from '../../src/lib/debt';
+import { daysSinceBalance, debtOverview, debtPlan, monthLabel, monthlyInterest, planDebt, totalPlan } from '../../src/lib/debt';
 import type { Debt } from '../../src/lib/types';
 
 const T = '2026-10-24T00:00:00.000Z';
@@ -71,4 +71,26 @@ describe('合計の推移と上乗せ', () => {
 describe('表示用', () => {
   it('monthLabel', () => expect(monthLabel('2027-03')).toBe('2027年3月'));
   it('daysSinceBalance', () => expect(daysSinceBalance(debt({ balance_date: '2026-09-20' }), new Date(2026, 9, 25))).toBe(35));
+});
+
+describe('まとめ（ホーム・サマリ用）', () => {
+  it('合計・毎月の返済・そのうちの手数料と元金・年の手数料', () => {
+    const o = debtOverview([
+      debt({ name: 'A', balance: 120000, monthly_payment: 10000 }),
+      debt({ name: 'B', balance: 240000, monthly_payment: 20000, history: [{ date: '2026-09-25', balance: 260000 }, { date: '2026-10-24', balance: 240000 }] }),
+    ])!;
+    expect(o.total).toBe(360000);
+    expect(o.monthly).toBe(30000);
+    expect(o.interestNow).toBe(1500 + 3000);
+    expect(o.principalNow).toBe(25500);
+    expect(o.yearlyFee).toBe(54000);
+    expect(o.payoffMonth).toBeTruthy();
+    expect(o.changeSinceLast).toBe(-20000);
+  });
+  it('登録がなければ null。手数料が返済額を超えても元金はマイナスにしない', () => {
+    expect(debtOverview([])).toBeNull();
+    const o = debtOverview([debt({ balance: 1000000, monthly_payment: 5000 })])!;
+    expect(o.principalNow).toBe(0);
+    expect(o.totalInterest).toBeNull();
+  });
 });

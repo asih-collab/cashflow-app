@@ -54,7 +54,7 @@ export interface TotalPlan {
 
 /**
  * 全部の残高の合計の推移。extra を足すときは、年率の高いものから順に上乗せする（手数料が一番減る順）。
- * 返し終わったものの返済額は、次に年率の高いものへ回す（extra がある場合のみ。0 なら今のペースのまま）。
+ * 返し終わったカードの返済額は他へ回さない（今のペースと比べたとき、違いが「上乗せした額」だけになるように）。
  */
 export function totalPlan(debts: Debt[], extra = 0): TotalPlan {
   const live = debts.filter((d) => !d.deleted_at && d.is_active);
@@ -70,10 +70,7 @@ export function totalPlan(debts: Debt[], extra = 0): TotalPlan {
     m = addMonths(m, 1);
     let pool = extra;
     for (const x of items) {
-      if (m <= x.from || x.b === 0) {
-        if (x.b === 0 && extra > 0) pool += x.d.monthly_payment;
-        continue;
-      }
+      if (m <= x.from || x.b === 0) continue;
       const interest = monthlyInterest(x.b, x.d.annual_rate);
       totalInterest += interest;
       x.b = Math.max(0, x.b + interest - x.d.monthly_payment);
@@ -105,4 +102,41 @@ export function daysSinceBalance(d: Debt, today: Date): number {
   const [y, mo, da] = d.balance_date.split('-').map(Number);
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   return Math.round((t.getTime() - new Date(y!, mo! - 1, da!).getTime()) / 86400000);
+}
+
+/** 固定費の「リボ・分割返済」の中分類（初期カテゴリの固定 ID） */
+export const REPAYMENT_CATEGORY_ID = '11111111-0013-4000-8000-000000000002';
+
+export interface DebtOverview {
+  /** 残高の合計 */
+  total: number;
+  /** 毎月の返済額の合計 */
+  monthly: number;
+  /** 今の残高で計算した、今月の返済のうち手数料の分 */
+  interestNow: number;
+  /** 今月の返済のうち元金が減る分（手数料を引いた残り。マイナスにはしない） */
+  principalNow: number;
+  /** 今の残高のままなら 1 年で払う手数料 */
+  yearlyFee: number;
+  payoffMonth: string | null;
+  months: number | null;
+  /** 完済までの手数料の合計（終わらない場合は null） */
+  totalInterest: number | null;
+  /** 前回確認した残高からの増減（合計。推移が 2 点以上あるカードだけ） */
+  changeSinceLast: number | null;
+}
+
+export function debtOverview(debts: Debt[]): DebtOverview | null {
+  const live = debts.filter((d) => !d.deleted_at && d.is_active);
+  if (live.length === 0) return null;
+  const total = live.reduce((a, d) => a + d.balance, 0);
+  const monthly = live.reduce((a, d) => a + d.monthly_payment, 0);
+  const interestNow = live.reduce((a, d) => a + monthlyInterest(d.balance, d.annual_rate), 0);
+  const plan = totalPlan(live);
+  const withHistory = live.filter((d) => d.history.length >= 2);
+  const changeSinceLast = withHistory.length === 0 ? null : withHistory.reduce((a, d) => a + d.history.at(-1)!.balance - d.history.at(-2)!.balance, 0);
+  return {
+    total, monthly, interestNow, principalNow: Math.max(0, monthly - interestNow), yearlyFee: interestNow * 12,
+    payoffMonth: plan.payoffMonth, months: plan.months, totalInterest: plan.months === null ? null : plan.totalInterest, changeSinceLast,
+  };
 }

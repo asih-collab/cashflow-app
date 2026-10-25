@@ -12,6 +12,7 @@ const openRows = new Set<string>();
 import type { AppContext, Route } from '../context';
 import { monthNav, periodFromParam } from '../monthNav';
 import { icon } from '../icons';
+import { renderDebtCard } from '../debtCard';
 
 function diff(cur: number, prev: number): HTMLElement | null {
   // 前の月に記録がないとき（使い始めの月など）は比べようがないので出さない
@@ -43,6 +44,13 @@ export function renderSummary(ctx: AppContext, route: Route): HTMLElement {
       h('div', null, h('span', { class: 'mono' }, 'SPEND'), h('b', { 'data-testid': 'sum-expense' }, yen(s.expense)), diff(s.expense, s.prevExpense)),
     ),
   ));
+
+  // リボ・分割の残高（今の状態なので、今月を見ているときだけ）
+  const debtCard = isCurrent ? renderDebtCard(store, 'sum-debt') : null;
+  if (debtCard) {
+    root.appendChild(h('h2', null, '返済 / Debt'));
+    root.appendChild(debtCard);
+  }
 
   root.appendChild(h('h2', null, '支出の内訳 / Mix'));
   const total = Math.max(1, s.expense);

@@ -368,3 +368,15 @@ label.field { min-width: 0; }
 .ledger-run .mono { font-size: 9.5px; }
 .ledger-day.today .ledger-date { color: var(--accent); }
 .ledger-day.future .card { opacity: .55; }
+
+/* リボ・分割の残高のまとめ（ホーム・サマリ）。手数料 = 朱色、元金 = 灰色。2 区分の間に 2px の隙間 */
+.debt-card { display: block; color: inherit; text-decoration: none; }
+.debt-card-total { font-family: var(--display); font-size: 34px; letter-spacing: .01em; line-height: 1.1; margin: 4px 0 2px; }
+.debt-split { display: flex; gap: 2px; height: 8px; margin: 12px 0 8px; }
+.debt-split i { display: block; height: 100%; border-radius: 4px; }
+.debt-split i.fee, .debt-split-legend i.fee { background: var(--chart); }
+.debt-split i.principal, .debt-split-legend i.principal { background: #6d6a64; }
+.debt-split-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); align-items: center; }
+.debt-split-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.debt-split-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.debt-split-legend b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--ink); letter-spacing: .02em; }

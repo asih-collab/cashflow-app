@@ -132,4 +132,27 @@ describe('AppStore', () => {
     expect(s.activeDebts).toHaveLength(0);
     expect(JSON.parse(s.exportJson()).debts).toHaveLength(1);
   });
+
+  it('リボの返済額を変えると、合っていた固定費の自動記録（リボ・分割返済）も合わせる。手で別の額にしていたら触らない', async () => {
+    const s = await fresh('repay');
+    const cat = '11111111-0013-4000-8000-000000000002';
+    const a = await s.saveDebt({ name: 'A', balance: 300000, balance_date: '2026-10-01', monthly_payment: 30000, annual_rate: 15 });
+    await s.saveDebt({ name: 'B', balance: 200000, balance_date: '2026-10-01', monthly_payment: 20000, annual_rate: 15 });
+    const rule = await s.saveRule({ name: 'リボ・分割返済', amount: 50000, type: 'expense', category_id: cat, payment_method_id: null, day_of_month: 27, needs_review: false });
+    expect(s.repaymentRule?.id).toBe(rule.id);
+    await s.saveDebt({ id: a.id, name: 'A', balance: 300000, balance_date: '2026-10-01', monthly_payment: 40000, annual_rate: 15 });
+    expect(s.repaymentRule?.amount).toBe(60000);
+    // 今月分の自動記録も合わせて直る
+    expect(s.liveTransactions.find((t) => t.recurring_rule_id === rule.id)?.amount).toBe(60000);
+    await s.deleteDebt(a.id);
+    expect(s.repaymentRule?.amount).toBe(20000);
+    // 手で別の額にしていたら、そのまま
+    await s.saveRule({ id: rule.id, name: 'リボ・分割返済', amount: 25000, type: 'expense', category_id: cat, payment_method_id: null, day_of_month: 27, needs_review: false });
+    const b = s.activeDebts[0]!;
+    await s.saveDebt({ id: b.id, name: 'B', balance: 200000, balance_date: '2026-10-01', monthly_payment: 22000, annual_rate: 15 });
+    expect(s.repaymentRule?.amount).toBe(25000);
+    await s.alignRepaymentRule();
+    expect(s.repaymentRule?.amount).toBe(22000);
+  });
 });
+

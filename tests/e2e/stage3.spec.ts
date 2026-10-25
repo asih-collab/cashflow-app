@@ -38,6 +38,28 @@ test.describe('段階 3: リボ残高・ショートカット・通知', () => {
     await expect(page.getByTestId('debt-history').locator('.list-item')).toHaveCount(2);
     await page.goto('./#/');
     await expect(page.getByTestId('home-debt')).toContainText('¥1,270,000');
+    // サマリにも出る。毎月の返済のうち手数料（270,000 × 15% ÷ 12 = 3,375 と 1,000,000 × 15% ÷ 12 = 12,500）
+    await page.goto('./#/summary');
+    await expect(page.getByTestId('sum-debt-total')).toHaveText('¥1,270,000');
+    await expect(page.getByTestId('sum-debt-fee')).toHaveText('¥15,875');
+  });
+
+  test('リボ残高: 固定費の自動記録（リボ・分割返済）と返済額の合計が違えば知らせ、合わせられる', async ({ page }) => {
+    await openApp(page, '#/recurring?id=new');
+    await page.getByTestId('rule-name').fill('リボ返済');
+    await page.getByTestId('rule-amount').fill('50000');
+    await page.getByTestId('rule-category').selectOption({ label: 'リボ・分割返済' });
+    await page.getByTestId('rule-save').tap();
+    await page.goto('./#/debts?id=new');
+    await page.getByTestId('debt-name').fill('カードA');
+    await page.getByTestId('debt-balance').fill('300000');
+    await page.getByTestId('debt-monthly').fill('30000');
+    await page.getByTestId('debt-save').tap();
+    await expect(page.getByTestId('debt-rule-mismatch')).toContainText('¥50,000');
+    await page.getByTestId('debt-rule-align').tap();
+    await expect(page.getByTestId('debt-rule-ok')).toContainText('¥30,000');
+    await page.goto('./#/recurring');
+    await expect(page.getByTestId('rule-リボ返済')).toContainText('¥30,000');
   });
 
   test('ショートカット: #/add?amount=&cat=&save=1 で開くとそのまま保存され、開き直しても二重にならない', async ({ page }) => {

@@ -7,6 +7,7 @@ import { toDateString } from './period';
 import type { Budget, Category, Debt, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
 import { dueRecurringTransactions, monthKey, postingDate } from './recurring';
 import { budgetId } from './budget';
+import { REPAYMENT_CATEGORY_ID } from './debt';
 import type { Syncer } from './sync';
 
 export interface NewTransaction {
@@ -201,9 +202,34 @@ export class AppStore {
     return this.debts.filter((d) => !d.deleted_at && d.is_active).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
   }
 
+  /** 毎月の返済額の合計 */
+  get debtMonthlyTotal(): number {
+    return this.activeDebts.reduce((a, d) => a + d.monthly_payment, 0);
+  }
+
+  /** 固定費の自動記録のうち「リボ・分割返済」のもの（あれば） */
+  get repaymentRule(): RecurringRule | undefined {
+    return this.activeRules.find((r) => r.is_active && r.type === 'expense' && r.category_id === REPAYMENT_CATEGORY_ID);
+  }
+
+  /** 固定費の「リボ・分割返済」の金額を、カードごとの返済額の合計に合わせる */
+  async alignRepaymentRule(): Promise<RecurringRule | undefined> {
+    const r = this.repaymentRule;
+    const sum = this.debtMonthlyTotal;
+    if (!r || sum <= 0 || r.amount === sum) return r;
+    return this.saveRule({ id: r.id, name: r.name, amount: sum, type: r.type, category_id: r.category_id, payment_method_id: r.payment_method_id, day_of_month: r.day_of_month, needs_review: r.needs_review });
+  }
+
+  /** カードの返済額が変わったとき、固定費の自動記録が合っていた場合だけ一緒に直す（手で別の額にしていたら触らない） */
+  private async followRepayment(prevSum: number): Promise<void> {
+    const r = this.repaymentRule;
+    if (r && r.amount === prevSum && this.debtMonthlyTotal !== prevSum) await this.alignRepaymentRule();
+  }
+
   /** 追加・編集。残高や日付が変わったら推移に 1 点足す（同じ日は置き換え） */
   async saveDebt(input: { id?: string; name: string; balance: number; balance_date: string; monthly_payment: number; annual_rate: number }): Promise<Debt> {
     const now = nowIso();
+    const prevSum = this.debtMonthlyTotal;
     const existing = input.id ? this.debts.find((d) => d.id === input.id) : undefined;
     const balance = Math.max(0, Math.trunc(input.balance) || 0);
     const point = { date: input.balance_date, balance };
@@ -229,6 +255,7 @@ export class AppStore {
     if (existing) Object.assign(existing, d);
     else this.debts.push(d);
     await this.save('debts', d);
+    await this.followRepayment(prevSum);
     this.emit();
     this.requestSync();
     return d;
@@ -237,9 +264,11 @@ export class AppStore {
   async deleteDebt(id: string): Promise<void> {
     const d = this.debts.find((x) => x.id === id);
     if (!d) return;
+    const prevSum = this.debtMonthlyTotal;
     const now = nowIso();
     Object.assign(d, { deleted_at: now, updated_at: now });
     await this.save('debts', d);
+    await this.followRepayment(prevSum);
     this.emit();
     this.requestSync();
   }

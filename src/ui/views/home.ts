@@ -12,7 +12,7 @@ import { INSTALL_STEPS, isIOS, isStandalone } from '../install';
 import { syncStatusText } from './settings';
 import { artworkElement } from '../art';
 import { icon } from '../icons';
-import { monthLabel, totalPlan } from '../../lib/debt';
+import { renderDebtCard } from '../debtCard';
 
 const INSTALL_DISMISSED_KEY = 'cf.installHintDismissed';
 const WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -128,18 +128,10 @@ export function renderHome(ctx: AppContext): HTMLElement {
   }
 
   // リボ・分割の残高（F08）。登録がある場合だけ
-  if (store.activeDebts.length > 0) {
-    const debts = store.activeDebts;
-    const plan = totalPlan(debts);
+  const debtCard = renderDebtCard(store, 'home-debt');
+  if (debtCard) {
     root.appendChild(h('h2', null, '返済 / Debt'));
-    root.appendChild(h('a', { class: 'card row row-link', href: '#/debts', 'data-testid': 'home-debt', style: 'flex-direction:row;align-items:center' },
-      h('div', { class: 'grow' },
-        h('div', null, 'リボ・分割の残高'),
-        h('div', { class: 'recent-meta' }, plan.payoffMonth ? `完済見込み ${monthLabel(plan.payoffMonth)}` : 'このままでは減りません'),
-      ),
-      h('span', { class: 'amount' }, yen(debts.reduce((a, d) => a + d.balance, 0))),
-      icon('chevron'),
-    ));
+    root.appendChild(debtCard);
   }
 
   // 最近の記録（直近 8 件）。間違えたらここで消せる

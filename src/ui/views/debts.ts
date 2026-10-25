@@ -44,6 +44,10 @@ export function renderDebts(ctx: AppContext, route: Route): HTMLElement {
       h('span', null, '毎月', h('b', null, yen(monthly))),
     ),
     h('div', { class: 'sub', style: 'margin-top:8px' },
+      h('span', null, 'うち手数料', h('b', { 'data-testid': 'debt-monthly-fee' }, yen(yearlyFee / 12))),
+      h('span', null, '元金', h('b', null, yen(Math.max(0, monthly - yearlyFee / 12)))),
+    ),
+    h('div', { class: 'sub', style: 'margin-top:8px' },
       h('span', null, '手数料（今の残高で年）', h('b', { 'data-testid': 'debt-yearly-fee' }, yen(yearlyFee))),
       base.months !== null ? h('span', null, '完済までの手数料', h('b', null, yen(base.totalInterest))) : null,
     ),
@@ -52,6 +56,20 @@ export function renderDebts(ctx: AppContext, route: Route): HTMLElement {
   const stale = debts.filter((d) => daysSinceBalance(d, today) > STALE_DAYS);
   if (stale.length > 0) {
     root.appendChild(h('div', { class: 'banner', 'data-testid': 'debt-stale' }, `${stale.map((d) => d.name).join('・')} の残高が 1 か月以上前のままです。明細を見て更新すると、見込みが正確になります。`));
+  }
+  // 固定費の自動記録（リボ・分割返済）との突き合わせ
+  const rule = store.repaymentRule;
+  if (rule && rule.amount !== monthly) {
+    root.appendChild(h('div', { class: 'banner', 'data-testid': 'debt-rule-mismatch' },
+      `固定費の自動記録「${rule.name}」は ${yen(rule.amount)} で、カードごとの返済額の合計 ${yen(monthly)} と違います。`,
+      h('button', { class: 'btn sm primary', type: 'button', style: 'margin-top:8px', 'data-testid': 'debt-rule-align', onClick: async () => {
+        await store.alignRepaymentRule();
+        toast(`「${rule.name}」を ${yen(monthly)} にしました（今月分の記録も合わせて直します）`);
+        ctx.navigate('/debts');
+      } }, `${yen(monthly)} に合わせる`),
+    ));
+  } else if (rule) {
+    root.appendChild(h('div', { class: 'muted small', style: 'margin:-2px 0 10px', 'data-testid': 'debt-rule-ok' }, `固定費の自動記録「${rule.name}」${yen(rule.amount)}（毎月 ${rule.day_of_month} 日）と一致しています。返済額を変えると自動で合わせます。`));
   }
   if (base.months === null) {
     root.appendChild(h('div', { class: 'banner' }, '毎月の返済額が手数料以下のカードがあり、このままでは残高が減りません。返済額を増やすか、下の「上乗せ」を試してください。'));
