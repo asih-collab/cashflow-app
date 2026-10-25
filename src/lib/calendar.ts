@@ -55,3 +55,42 @@ export function compactYen(n: number): string {
   const man = a / 10000;
   return `${man < 10 ? man.toFixed(1).replace(/\.0$/, '') : Math.round(man)}万`;
 }
+
+export type LedgerFilter = 'all' | 'expense' | 'income';
+
+export interface LedgerDay {
+  date: string;
+  /** その日の記録（収入が先、あとは金額の大きい順）。絞り込みで隠したものは含まない */
+  entries: Transaction[];
+  /** その日の収支（絞り込みに関係なく全件） */
+  net: number;
+  /** 期間の初日からその日までの収支の累計（絞り込みに関係なく全件） */
+  running: number;
+}
+
+/** 記録 1 件が収支に与える額（収入 +、支出 −。収入カテゴリで支出にしたものは収入の取り消しとして −） */
+export function signedAmount(t: Transaction): number {
+  return t.type === 'income' ? t.amount : -t.amount;
+}
+
+/**
+ * 履歴の一覧表示: 期間の記録を日付順に並べ、日ごとの収支と累計（お金の流れ）を付ける。
+ * 記録のない日は出さない。予定の日付（自動記録の固定費など）も含める。
+ */
+export function ledgerDays(transactions: Transaction[], period: Period, filter: LedgerFilter = 'all'): LedgerDay[] {
+  const live = transactions.filter((t) => !t.deleted_at && t.date >= period.start && t.date <= period.end);
+  const byDate = new Map<string, Transaction[]>();
+  for (const t of live) byDate.set(t.date, [...(byDate.get(t.date) ?? []), t]);
+  const out: LedgerDay[] = [];
+  let running = 0;
+  for (const date of [...byDate.keys()].sort()) {
+    const all = byDate.get(date)!;
+    const net = all.reduce((a, t) => a + signedAmount(t), 0);
+    running += net;
+    const entries = all
+      .filter((t) => filter === 'all' || t.type === filter)
+      .sort((a, b) => (a.type === b.type ? b.amount - a.amount || a.created_at.localeCompare(b.created_at) : a.type === 'income' ? -1 : 1));
+    if (entries.length > 0) out.push({ date, entries, net, running });
+  }
+  return out;
+}

@@ -352,3 +352,19 @@ label.field { min-width: 0; }
 .debt-legend .lkey.extra, .debt-tip .lkey.extra { border-top: 2px dashed var(--chart-2); }
 .debt-tip { position: absolute; top: 24px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 10px; font-size: 13px; pointer-events: none; min-width: 150px; }
 .debt-tip b { font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: .02em; }
+
+/* 履歴の一覧（お金の流れ） */
+.chip { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--ink-2); text-decoration: none; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.ledger-day { margin-bottom: 6px; }
+.ledger-day .card { margin-bottom: 8px; }
+.ledger-head { display: flex; align-items: baseline; gap: 10px; padding: 8px 4px 6px; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 1; }
+.ledger-date { font-family: var(--display); font-size: 20px; letter-spacing: .02em; flex: 1; }
+.ledger-date .mono { margin-left: 4px; }
+.ledger-net, .ledger-run { font-family: var(--display); font-size: 15px; letter-spacing: .02em; white-space: nowrap; }
+.ledger-net.pos { color: var(--good); }
+.ledger-net.neg { color: var(--accent); }
+.ledger-run { color: var(--ink-2); }
+.ledger-run .mono { font-size: 9.5px; }
+.ledger-day.today .ledger-date { color: var(--accent); }
+.ledger-day.future .card { opacity: .55; }

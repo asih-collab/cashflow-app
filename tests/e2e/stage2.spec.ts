@@ -193,4 +193,41 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await detail.getByTestId('detail-item').first().tap();
     await expect(page.getByTestId('edit-delete')).toBeVisible();
   });
+
+  test('履歴の一覧: 月の記録が日付順に並び、日ごとの収支と累計が出る。絞り込み・修正ができ、表示の切り替えは覚えておく', async ({ page }) => {
+    await openApp(page, '#/add');
+    await page.getByTestId('mode-income').tap();
+    await tapDigits(page, '300000');
+    await page.getByTestId('cat-給与').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await record(page, '1200', '外食');
+    await record(page, '800', 'カフェ');
+
+    await page.goto('./#/history');
+    await page.getByTestId('view-list').tap();
+    await expect(page.getByTestId('ledger')).toBeVisible();
+    await expect(page.getByTestId('ledger-row')).toHaveCount(3);
+    await expect(page.getByTestId('ledger-row').first()).toContainText('+¥300,000');
+    await expect(page.getByTestId('ledger-running').last()).toHaveText('累計 +¥298,000');
+
+    await page.getByTestId('ledger-filter-expense').tap();
+    await expect(page.getByTestId('ledger-row')).toHaveCount(2);
+    await expect(page.getByTestId('ledger-row').first()).toContainText('−¥1,200');
+
+    // 記録を押して直すと一覧に戻る
+    await page.getByTestId('ledger-row').first().tap();
+    await tapDigits(page, '1500');
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('ledger')).toBeVisible();
+    await expect(page.getByTestId('ledger-row').first()).toContainText('−¥1,500');
+
+    // 次に開いたときも一覧のまま。カレンダーに戻せる
+    await page.goto('./#/');
+    await page.goto('./#/history');
+    await expect(page.getByTestId('ledger')).toBeVisible();
+    await page.getByTestId('view-cal').tap();
+    await expect(page.getByTestId('calendar')).toBeVisible();
+  });
 });
+
