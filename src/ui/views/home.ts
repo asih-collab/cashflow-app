@@ -14,6 +14,7 @@ import { artworkElement } from '../art';
 import { icon } from '../icons';
 import { renderDebtCard } from '../debtCard';
 import { monthLabel } from '../../lib/debt';
+import { HOME_ADVICE_COUNT, renderAdviceList } from '../adviceList';
 
 const INSTALL_DISMISSED_KEY = 'cf.installHintDismissed';
 const WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -92,6 +93,13 @@ export function renderHome(ctx: AppContext): HTMLElement {
     root.appendChild(h('a', { class: 'banner', href: '#/budget', 'data-testid': 'budget-hint', style: 'display:block;text-decoration:none;margin-top:16px' },
       h('b', null, '予算を決める'), h('div', { class: 'small' }, '大分類ごとに予算を決めると、ここに「今月あといくら使えるか」が出ます。'),
     ));
+  }
+
+  // 今月の気づき（改善アドバイス F23）。上位だけ
+  const adv = renderAdviceList(store, { max: HOME_ADVICE_COUNT, testid: 'home-advice' });
+  if (adv) {
+    root.appendChild(h('h2', null, '今月の気づき / Insights'));
+    root.appendChild(adv);
   }
 
   // 一括返済の予定の月になったら案内（返したら記録と残高をまとめて更新）

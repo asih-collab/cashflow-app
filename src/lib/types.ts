@@ -115,7 +115,22 @@ export interface Debt {
   deleted_at: string | null;
 }
 
-export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'debts';
+/** 改善アドバイス（F23）への反応。月 1 回の見直しに使う */
+export interface AdviceFeedback {
+  id: string;
+  /** どの予算期間のアドバイスか */
+  period_start: string;
+  rule: string;
+  advice_key: string;
+  useful: boolean;
+  /** 出ていた文言（見直しのとき、どの言い方が役に立ったかを見るため） */
+  title: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'debts' | 'advice_feedback';
 
 export interface Session {
   access_token: string;

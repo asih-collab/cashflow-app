@@ -4,7 +4,7 @@ import type { Db } from './db';
 import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
 import { toDateString } from './period';
-import type { Budget, Category, Debt, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
+import type { AdviceFeedback, Budget, Category, Debt, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
 import { dueRecurringTransactions, monthKey, postingDate } from './recurring';
 import { budgetId } from './budget';
 import { REPAYMENT_CATEGORY_ID } from './debt';
@@ -50,6 +50,7 @@ export class AppStore {
   recurringRules: RecurringRule[] = [];
   budgets: Budget[] = [];
   debts: Debt[] = [];
+  adviceFeedback: AdviceFeedback[] = [];
   settings: Settings = { ...DEFAULT_SETTINGS };
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,6 +97,7 @@ export class AppStore {
     this.recurringRules = await this.db.getAll<RecurringRule>('recurring_rules');
     this.budgets = await this.db.getAll<Budget>('budgets');
     this.debts = await this.db.getAll<Debt>('debts');
+    this.adviceFeedback = await this.db.getAll<AdviceFeedback>('advice_feedback');
     this.settings = { ...DEFAULT_SETTINGS, ...((await this.db.get<Settings>('settings', 'me')) ?? {}) };
     this.emit();
   }
@@ -194,6 +196,27 @@ export class AppStore {
     await this.save('budgets', b);
     this.emit();
     this.requestSync();
+  }
+
+  // ---- 改善アドバイス（F23）への反応 ------------------------------------------
+
+  feedbackFor(periodStart: string, key: string): AdviceFeedback | undefined {
+    return this.adviceFeedback.find((f) => f.period_start === periodStart && f.advice_key === key && !f.deleted_at);
+  }
+
+  /** 役に立った / 立たない。同じ期間・同じアドバイスへの反応は 1 件（押し直したら上書き） */
+  async setAdviceFeedback(periodStart: string, advice: { rule: string; key: string; title: string }, useful: boolean): Promise<AdviceFeedback> {
+    const now = nowIso();
+    const existing = this.feedbackFor(periodStart, advice.key);
+    const f: AdviceFeedback = existing
+      ? { ...existing, useful, title: advice.title, updated_at: now }
+      : { id: uuid(), period_start: periodStart, rule: advice.rule, advice_key: advice.key, useful, title: advice.title, created_at: now, updated_at: now, deleted_at: null };
+    if (existing) Object.assign(existing, f);
+    else this.adviceFeedback.push(f);
+    await this.save('advice_feedback', f);
+    this.emit();
+    this.requestSync();
+    return f;
   }
 
   // ---- リボ・分割の残高（F08） ------------------------------------------------

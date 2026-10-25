@@ -13,6 +13,7 @@ import type { AppContext, Route } from '../context';
 import { monthNav, periodFromParam } from '../monthNav';
 import { icon } from '../icons';
 import { renderDebtCard } from '../debtCard';
+import { renderAdviceList } from '../adviceList';
 
 function diff(cur: number, prev: number): HTMLElement | null {
   // 前の月に記録がないとき（使い始めの月など）は比べようがないので出さない
@@ -44,6 +45,12 @@ export function renderSummary(ctx: AppContext, route: Route): HTMLElement {
       h('div', null, h('span', { class: 'mono' }, 'SPEND'), h('b', { 'data-testid': 'sum-expense' }, yen(s.expense)), diff(s.expense, s.prevExpense)),
     ),
   ));
+
+  // 改善アドバイス（今月を見ているときだけ。全部）
+  if (isCurrent) {
+    root.appendChild(h('h2', null, '気づき / Insights'));
+    root.appendChild(renderAdviceList(store, { testid: 'sum-advice', emptyText: '今のところ、特に気になる点はありません。' })!);
+  }
 
   // リボ・分割の残高（今の状態なので、今月を見ているときだけ）
   const debtCard = isCurrent ? renderDebtCard(store, 'sum-debt') : null;

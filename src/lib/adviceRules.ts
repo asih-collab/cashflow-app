@@ -1,0 +1,227 @@
+// 改善アドバイス（F23）のルール・しきい値・文言。月 1 回の見直しでは、このファイルだけを直す（04 の 6 章）。
+// 変えたら tests/unit/advice.test.ts を通すこと。ルールの ID（rule）は集計に使うので、意味が変わらない限り変えない。
+//
+// 各ルールは「今月の状況（AdviceContext）」を受け取り、0 件以上のアドバイスを返す。
+// priority は大きいほど上に出る。warn（注意）> info（参考）> good（順調）の順に目安を分けている。
+
+import type { Advice, AdviceContext } from './advice';
+import { debtOverview, monthLabel, pendingLumps, totalPlan } from './debt';
+import { yen } from './money';
+
+/** しきい値（見直しで調整する値はここ） */
+export const LIMITS = {
+  /** 見込みを今日までのペースだけで出すまでの日数（それまでは前月の実績と混ぜる） */
+  forecastWarmupDays: 7,
+  /** 同じルールから出す件数の上限 */
+  maxPerRule: 2,
+  /** ホームに出す件数 */
+  homeCount: 3,
+  /** 赤字見込みを知らせる最小額（ぶれで出続けないように） */
+  deficitMin: 3000,
+  /** 黒字見込みを返済に回す提案を出す最小額 */
+  surplusMin: 10000,
+  /** 予算のペース: 使った割合が経過の割合をこれ以上上回ったら知らせる */
+  paceMargin: 0.15,
+  /** 予算のペースの判定を始める最小の実績（少額で騒がない） */
+  paceMinSpent: 3000,
+  /** 予算のペースの判定は月の何日目から（初日に 1 回使っただけで出ないように） */
+  paceFromDay: 4,
+  /** 前月より増えた: 見込みが前月の何倍以上、かつ何円以上多いとき */
+  jumpRatio: 1.3,
+  jumpMin: 5000,
+  /** 1 回あたりの金額: 何回以上の記録で比べるか、何割以上・何円以上上がったら */
+  unitMinCount: 3,
+  unitRatio: 1.3,
+  unitMin: 300,
+  /** 回数が多い中分類（コンビニ・カフェなど）: 今月の見込み回数がこれ以上 */
+  freqNames: ['コンビニ', 'カフェ', 'タクシー'],
+  freqMin: 12,
+  /** 回数の判定は、月の何日目から・何回以上の記録から（初日の 1 回で騒がない） */
+  freqFromDay: 7,
+  freqMinCount: 4,
+  /** 直近 7 日で記録のない日がこれ以上なら、記録漏れを知らせる */
+  emptyDaysMin: 3,
+  /** 予算より順調: 使った割合が経過の割合よりこれ以上少ないとき */
+  goodMargin: 0.1,
+} as const;
+
+const fmtDays = (n: number) => `${n} 日`;
+const perDay = (amount: number, days: number) => (days > 0 ? Math.floor(amount / days) : amount);
+
+/** 赤字の見込み → どこをいくら抑えれば黒字か */
+function deficitForecast(c: AdviceContext): Advice[] {
+  if (c.income <= 0 || c.balanceForecast > -LIMITS.deficitMin) return [];
+  const gap = -c.balanceForecast;
+  // 始まって間もないうちは、今月の数日分より前月の傾向のほうが当てになる
+  const top = (c.warmingUp ? c.prevParents[0] : undefined) ?? c.parents[0];
+  const allowance = Math.max(0, c.variableForecast - gap - c.variableSoFar);
+  return [{
+    rule: 'deficit_forecast', key: 'deficit_forecast', level: 'warn', priority: 100, href: '#/summary',
+    title: c.daysLeft > 0 ? `このペースだと月末に約 ${yen(gap)} の赤字です` : `今月は約 ${yen(gap)} の赤字で終わりそうです`,
+    body: c.daysLeft > 0
+      ? `黒字で終えるには、変動費を残り ${fmtDays(c.daysLeft)}で ${yen(allowance)} 以内（1 日 ${yen(perDay(allowance, c.daysLeft))}）にします。${top ? `いちばん大きいのは${top.name}（${yen(top.amount)}）です。` : ''}`
+      : `${top ? `いちばん大きかったのは${top.name}（${yen(top.amount)}）でした。` : ''}来月の予算を見直すときの目安にしてください。`,
+  }];
+}
+
+/** 予算を超えた大分類 */
+function overBudget(c: AdviceContext): Advice[] {
+  const out: Advice[] = [];
+  for (const p of c.parents) {
+    const b = c.budgets.get(p.id);
+    if (!b || p.amount <= b) continue;
+    out.push({
+      rule: 'over_budget', key: `over_budget:${p.name}`, level: 'warn', priority: 90 + Math.min(9, (p.amount - b) / 5000),
+      href: '#/summary',
+      title: `${p.name}が予算を ${yen(p.amount - b)} 超えています`,
+      body: `予算 ${yen(b)} に対して ${yen(p.amount)}。${c.daysLeft > 0 ? `残り ${fmtDays(c.daysLeft)}は${p.name}を控えめにすると、ほかの予算で吸収できます。` : ''}`,
+    });
+  }
+  return out;
+}
+
+/** 予算のペースより速い大分類 */
+function budgetPace(c: AdviceContext): Advice[] {
+  if (c.elapsedDays < LIMITS.paceFromDay || c.daysLeft <= 0) return [];
+  const out: Advice[] = [];
+  for (const p of c.parents) {
+    const b = c.budgets.get(p.id);
+    if (!b || p.amount > b || p.amount < LIMITS.paceMinSpent) continue;
+    const used = p.amount / b;
+    if (used < c.elapsedRatio + LIMITS.paceMargin) continue;
+    const left = b - p.amount;
+    out.push({
+      rule: 'budget_pace', key: `budget_pace:${p.name}`, level: 'warn', priority: 80 + used * 5,
+      href: '#/summary',
+      title: `${p.name}が予算のペースより速めです`,
+      body: `月の ${Math.round(c.elapsedRatio * 100)}% が過ぎたところで、予算の ${Math.round(used * 100)}% を使っています。残りは ${yen(left)}、1 日 ${yen(perDay(left, c.daysLeft))} までに抑えると予算内です。`,
+    });
+  }
+  return out;
+}
+
+/** 前月より大きく増えそうな大分類 */
+function categoryJump(c: AdviceContext): Advice[] {
+  if (!c.hasPrev || c.elapsedDays < LIMITS.paceFromDay) return [];
+  const out: Advice[] = [];
+  for (const p of c.parents) {
+    const prev = c.prevParents.find((x) => x.id === p.id)?.amount ?? 0;
+    if (prev <= 0) continue;
+    const forecast = Math.round((p.amount / c.elapsedDays) * c.totalDays);
+    if (forecast < prev * LIMITS.jumpRatio || forecast - prev < LIMITS.jumpMin) continue;
+    out.push({
+      rule: 'category_jump', key: `category_jump:${p.name}`, level: 'info', priority: 60 + Math.min(9, (forecast - prev) / 10000),
+      href: '#/summary',
+      title: `${p.name}が先月より増えるペースです`,
+      body: `このままだと月末に約 ${yen(forecast)}（先月 ${yen(prev)}、+${yen(forecast - prev)}）。`,
+    });
+  }
+  return out;
+}
+
+/** 1 回あたりの金額が上がった中分類 */
+function unitPriceUp(c: AdviceContext): Advice[] {
+  if (!c.hasPrev) return [];
+  const out: Advice[] = [];
+  for (const s of c.subs) {
+    const p = c.prevSubs.find((x) => x.id === s.id);
+    if (!p || s.count < LIMITS.unitMinCount || p.count < LIMITS.unitMinCount) continue;
+    const now = Math.round(s.amount / s.count);
+    const before = Math.round(p.amount / p.count);
+    if (now < before * LIMITS.unitRatio || now - before < LIMITS.unitMin) continue;
+    out.push({
+      rule: 'unit_price_up', key: `unit_price_up:${s.name}`, level: 'info', priority: 50,
+      title: `${s.name}の 1 回あたりが上がっています`,
+      body: `先月は 1 回 ${yen(before)}、今月は ${yen(now)}（${s.count} 回）。回数より 1 回の金額で増えています。`,
+    });
+  }
+  return out;
+}
+
+/** 回数の多い中分類（コンビニ・カフェなど） */
+function frequency(c: AdviceContext): Advice[] {
+  const out: Advice[] = [];
+  for (const s of c.subs) {
+    if (!(LIMITS.freqNames as readonly string[]).includes(s.name)) continue;
+    if (c.elapsedDays < LIMITS.freqFromDay || s.count < LIMITS.freqMinCount) continue;
+    const forecastCount = Math.round((s.count / c.elapsedDays) * c.totalDays);
+    if (forecastCount < LIMITS.freqMin) continue;
+    const unit = Math.round(s.amount / s.count);
+    const weekly = Math.max(1, Math.round(forecastCount / (c.totalDays / 7)));
+    const save = Math.round(unit * Math.round(c.totalDays / 7));
+    out.push({
+      rule: 'frequency', key: `frequency:${s.name}`, level: 'info', priority: 45,
+      title: `${s.name}は今月 ${s.count} 回（${yen(s.amount)}）`,
+      body: `このままだと月 ${forecastCount} 回ほど（週 ${weekly} 回、1 回 ${yen(unit)}）。週に 1 回減らすと、月 ${yen(save)} ほど浮きます。`,
+    });
+  }
+  return out;
+}
+
+/** 黒字の見込み → 返済に回すと完済がどれだけ早まるか */
+function surplusToDebt(c: AdviceContext): Advice[] {
+  // 始まって間もないうちは見込みが予算頼みなので、実績がたまってから出す
+  if (c.debts.length === 0 || c.income <= 0 || c.warmingUp || c.balanceForecast < LIMITS.surplusMin) return [];
+  const surplus = Math.floor(c.balanceForecast / 1000) * 1000;
+  const base = totalPlan(c.debts);
+  // 年率のいちばん高いカード（同じなら残高の大きいほう）に、月末（期間の最後の月）にまとめて返したとする
+  const target = [...c.debts].filter((d) => d.balance > 0).sort((a, b) => b.annual_rate - a.annual_rate || b.balance - a.balance)[0];
+  if (!target) return [];
+  const month = c.period.end.slice(0, 7);
+  const alt = totalPlan(c.debts.map((d) => (d.id === target.id ? { ...d, lumps: [...(d.lumps ?? []), { month, amount: surplus, done: false }] } : d)));
+  const faster = base.months !== null && alt.months !== null ? base.months - alt.months : 0;
+  const saved = base.totalInterest - alt.totalInterest;
+  if (saved <= 0) return [];
+  return [{
+    rule: 'surplus_to_debt', key: 'surplus_to_debt', level: 'good', priority: 70, href: '#/debts',
+    title: `月末に約 ${yen(c.balanceForecast)} の黒字見込みです`,
+    body: `このうち ${yen(surplus)} を${target.name}の返済に回すと、手数料が約 ${yen(saved)} 減ります${faster > 0 ? `（完済が ${faster} か月早まる）` : ''}。`,
+  }];
+}
+
+/** リボの手数料の大きさと、次の一括返済の効果 */
+function revoFee(c: AdviceContext): Advice[] {
+  const o = debtOverview(c.debts);
+  if (!o || o.interestNow <= 0) return [];
+  const next = c.debts.flatMap((d) => pendingLumps(d).map((l) => ({ d, l }))).sort((a, b) => a.l.month.localeCompare(b.l.month))[0];
+  let after = '';
+  if (next) {
+    const reduced = Math.round((next.l.amount * next.d.annual_rate) / 100 / 12);
+    after = `${monthLabel(next.l.month)}の一括返済（${yen(next.l.amount)}）のあとは、月 ${yen(reduced)} ほど減ります。`;
+  }
+  const plan = totalPlan(c.debts);
+  return [{
+    rule: 'revo_fee', key: 'revo_fee', level: 'info', priority: 30, href: '#/debts',
+    title: `リボの手数料は今月約 ${yen(o.interestNow)}`,
+    body: `毎月の返済 ${yen(o.monthly)} のうち、残高が減るのは ${yen(o.principalNow)} です。${after}${plan.payoffMonth ? `完済見込みは${monthLabel(plan.payoffMonth)}。` : ''}`,
+  }];
+}
+
+/** 記録の抜け（使い始めて 1 週間以上たってから） */
+function missingRecords(c: AdviceContext): Advice[] {
+  if (c.daysSinceFirstRecord < 7 || c.emptyDaysLast7 < LIMITS.emptyDaysMin) return [];
+  return [{
+    rule: 'missing_records', key: 'missing_records', level: 'info', priority: 65, href: '#/history?v=list',
+    title: `この 1 週間で記録のない日が ${c.emptyDaysLast7} 日あります`,
+    body: '使わなかった日なら問題ありません。記録し忘れがあれば、履歴から日付を選んで追加できます。',
+  }];
+}
+
+/** 予算より順調 */
+function goodPace(c: AdviceContext): Advice[] {
+  const budget = [...c.budgets.values()].reduce((a, b) => a + b, 0);
+  if (budget <= 0 || c.elapsedDays < LIMITS.paceFromDay || c.daysLeft <= 0) return [];
+  const used = c.variableSoFar / budget;
+  if (used > c.elapsedRatio - LIMITS.goodMargin) return [];
+  const expectedLeft = Math.max(0, budget - c.variableForecast);
+  return [{
+    rule: 'good_pace', key: 'good_pace', level: 'good', priority: 20,
+    title: '予算より少ないペースです',
+    body: `月の ${Math.round(c.elapsedRatio * 100)}% が過ぎて、予算の ${Math.round(used * 100)}% です。この調子なら月末に約 ${yen(expectedLeft)} 残ります。`,
+  }];
+}
+
+/** 上から順に評価する（並びは priority で決まるので、ここの順は関係ない） */
+export const RULES: ((c: AdviceContext) => Advice[])[] = [
+  deficitForecast, overBudget, budgetPace, categoryJump, unitPriceUp, frequency, surplusToDebt, revoFee, missingRecords, goodPace,
+];

@@ -380,3 +380,18 @@ label.field { min-width: 0; }
 .debt-split-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 .debt-split-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
 .debt-split-legend b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--ink); letter-spacing: .02em; }
+
+/* 改善アドバイス（F23）。左の線の色で注意 / 参考 / 順調。文字でも種別を出す */
+.advice-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.advice { margin: 0; border-left: 3px solid var(--line-strong); padding: 12px 16px; }
+.advice.warn { border-left-color: var(--accent); }
+.advice.good { border-left-color: var(--good); }
+.advice-level { font-size: 10px; margin-bottom: 4px; }
+.advice.warn .advice-level { color: var(--accent); }
+.advice.good .advice-level { color: var(--good); }
+.advice-title { display: block; font-weight: 700; font-size: 16px; line-height: 1.45; color: var(--ink); text-decoration: none; }
+a.advice-title::after { content: " →"; color: var(--muted); font-weight: 400; }
+.advice-body { font-size: 14px; line-height: 1.65; color: var(--ink-2); margin-top: 4px; }
+.advice-fb { gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.chip.sm { font-size: 12px; padding: 4px 10px; background: transparent; }
+.chip.sm.on { background: var(--ink); color: var(--bg); }
