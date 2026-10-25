@@ -132,7 +132,7 @@ export function adviceContext(input: {
   const variableForecast = Math.round(anchor > 0 ? pace * w + anchor * (1 - w) : pace);
 
   // 直近 7 日（今日を除く）の記録のない日
-  const manualDays = new Set(transactions.filter((t) => !t.deleted_at && (t.source === 'manual' || t.source === 'shortcut')).map((t) => t.date));
+  const manualDays = new Set(transactions.filter((t) => !t.deleted_at && (t.source === 'manual' || t.source === 'shortcut' || t.source === 'receipt')).map((t) => t.date));
   let emptyDaysLast7 = 0;
   const td = parseDate(today);
   for (let i = 1; i <= 7; i++) {

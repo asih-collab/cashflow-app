@@ -18,6 +18,7 @@ import { renderHandoff } from './ui/views/handoff';
 import { renderBudget } from './ui/views/budget';
 import { renderRecurring } from './ui/views/recurring';
 import { renderDebts } from './ui/views/debts';
+import { renderReceipt } from './ui/views/receipt';
 import { renderSummary } from './ui/views/summary';
 import { renderHistory } from './ui/views/history';
 import { isIOS, isStandalone } from './ui/install';
@@ -94,7 +95,7 @@ async function boot(): Promise<void> {
     tabbar.append(
       tab('#/', 'home', 'ホーム', path === '/'),
       tab('#/history', 'list', '履歴', path === '/history' || path === '/edit'),
-      tab('#/add', 'add', '記録', path === '/add', 'add'),
+      tab('#/add', 'add', '記録', path === '/add' || path === '/receipt', 'add'),
       tab('#/summary', 'chart', 'サマリ', path === '/summary' || path === '/budget'),
       tab('#/settings', 'settings', '設定', ['/settings', '/categories', '/login', '/handoff', '/recurring', '/debts'].includes(path)),
     );
@@ -117,6 +118,7 @@ async function boot(): Promise<void> {
       case '/budget': el = renderBudget(ctx, route); break;
       case '/recurring': el = renderRecurring(ctx, route); break;
       case '/debts': el = renderDebts(ctx, route); break;
+      case '/receipt': el = renderReceipt(ctx, route); break;
       case '/summary': el = renderSummary(ctx, route); break;
       case '/history': el = renderHistory(ctx, route); break;
       default: el = renderHome(ctx);
@@ -130,7 +132,7 @@ async function boot(): Promise<void> {
   window.addEventListener('hashchange', render);
   // データや同期状態が変わったら、入力中でない画面だけ描き直す
   const rerenderIfIdle = () => {
-    if (['/add', '/edit', '/login', '/handoff', '/budget', '/recurring', '/debts'].includes(ctx.route?.path ?? '')) return;
+    if (['/add', '/edit', '/login', '/handoff', '/budget', '/recurring', '/debts', '/receipt'].includes(ctx.route?.path ?? '')) return;
     render();
   };
   store.subscribe(rerenderIfIdle);

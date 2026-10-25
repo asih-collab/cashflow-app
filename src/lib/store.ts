@@ -10,6 +10,17 @@ import { budgetId } from './budget';
 import { REPAYMENT_CATEGORY_ID } from './debt';
 import type { Syncer } from './sync';
 
+export interface ReceiptStats {
+  /** 読み取った回数 */
+  reads: number;
+  /** そのうち保存した回数 */
+  saved: number;
+  /** 保存したうち、読み取った金額・日付・カテゴリを直さずに使えた回数 */
+  amountOk: number;
+  dateOk: number;
+  categoryOk: number;
+}
+
 export interface NewTransaction {
   amount: number;
   categoryId: string | null;
@@ -196,6 +207,25 @@ export class AppStore {
     await this.save('budgets', b);
     this.emit();
     this.requestSync();
+  }
+
+  // ---- レシートの読み取りの成績（この端末だけ。精度を確かめるため） -------------
+
+  async receiptStats(): Promise<ReceiptStats> {
+    return { reads: 0, saved: 0, amountOk: 0, dateOk: 0, categoryOk: 0, ...((await this.db.get<ReceiptStats>('meta', 'receipt-stats')) ?? {}) };
+  }
+
+  /** 読み取った値と、保存した値（人が直した後）を比べて数える */
+  async recordReceiptOutcome(o: { saved: boolean; amountOk: boolean; dateOk: boolean; categoryOk: boolean }): Promise<void> {
+    const s = await this.receiptStats();
+    if (!o.saved) s.reads++;
+    else {
+      s.saved++;
+      if (o.amountOk) s.amountOk++;
+      if (o.dateOk) s.dateOk++;
+      if (o.categoryOk) s.categoryOk++;
+    }
+    await this.db.put('meta', s, 'receipt-stats');
   }
 
   // ---- 改善アドバイス（F23）への反応 ------------------------------------------

@@ -66,6 +66,20 @@ export function renderSettings(ctx: AppContext): HTMLElement {
   root.appendChild(h('h2', null, '通知'));
   root.appendChild(renderPushCard(ctx));
 
+  // ---- レシートの読み取りの成績（この端末） ----
+  const rc = h('div', { class: 'card small', 'data-testid': 'receipt-stats' }, '集計中…');
+  root.appendChild(h('h2', null, 'レシートの読み取り'));
+  root.appendChild(rc);
+  void ctx.store.receiptStats().then((st) => {
+    const pct = (n: number) => (st.saved > 0 ? `${Math.round((n / st.saved) * 100)}%` : '—');
+    rc.replaceChildren(
+      st.saved === 0
+        ? h('div', { class: 'muted' }, 'まだ使っていません。記録画面の右上「レシート」から使えます。')
+        : h('div', null, `保存 ${st.saved} 件のうち、直さずに使えた割合: 金額 ${pct(st.amountOk)}・日付 ${pct(st.dateOk)}・カテゴリ ${pct(st.categoryOk)}`),
+      h('div', { class: 'muted', style: 'margin-top:4px' }, 'この iPhone での集計です。読み取りの改善に使います。'),
+    );
+  });
+
   // ---- カテゴリ・支払い手段 ----
   const lists = h('div', { class: 'card' });
   lists.appendChild(h('a', { class: 'list-item', href: '#/recurring', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-recurring' }, h('span', { class: 'grow' }, '固定費・定期の収入（毎月の自動記録）'), h('span', { class: 'muted' }, icon('chevron'))));

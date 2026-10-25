@@ -31,7 +31,7 @@ export interface PaymentMethod {
 }
 
 export type TransactionType = 'expense' | 'income';
-export type TransactionSource = 'manual' | 'recurring' | 'shortcut' | 'csv';
+export type TransactionSource = 'manual' | 'recurring' | 'shortcut' | 'csv' | 'receipt';
 
 export interface Transaction {
   id: string;

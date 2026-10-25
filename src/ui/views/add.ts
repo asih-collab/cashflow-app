@@ -52,7 +52,10 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
             h('a', { class: 'btn sm', href: `#/add?copy=${editing.id}`, 'data-testid': 'edit-copy', style: 'text-decoration:none' }, icon('copy'), 'コピー'),
             h('button', { type: 'button', class: 'btn sm danger', 'data-testid': 'edit-delete', onClick: () => void remove() }, icon('trash'), '削除'),
           )
-        : h('span', null, `${toDateString(new Date()).slice(5).replace('-', '/')} 今日`),
+        : h('div', { class: 'row', style: 'gap:10px' },
+            h('a', { class: 'btn sm', href: '#/receipt', 'data-testid': 'go-receipt', style: 'text-decoration:none;min-height:34px' }, icon('receipt'), 'レシート'),
+            h('span', null, `${toDateString(new Date()).slice(5).replace('-', '/')} 今日`),
+          ),
     ),
   );
 

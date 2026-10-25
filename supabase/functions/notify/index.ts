@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 
   const candidates: Candidate[] = userIds.map((user_id) => ({ user_id, manualCount: 0, monthStartDay: 1 }));
   if (kind === 'reminder') {
-    const rows = await rest<{ user_id: string }[]>(`transactions?select=user_id&user_id=in.${inList}&date=eq.${today}&deleted_at=is.null&source=in.(manual,shortcut)`);
+    const rows = await rest<{ user_id: string }[]>(`transactions?select=user_id&user_id=in.${inList}&date=eq.${today}&deleted_at=is.null&source=in.(manual,shortcut,receipt)`);
     for (const r of rows) candidates.find((c) => c.user_id === r.user_id)!.manualCount++;
   }
   if (kind === 'review') {

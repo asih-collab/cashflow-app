@@ -395,3 +395,9 @@ a.advice-title::after { content: " →"; color: var(--muted); font-weight: 400; 
 .advice-fb { gap: 6px; margin-top: 10px; flex-wrap: wrap; }
 .chip.sm { font-size: 12px; padding: 4px 10px; background: transparent; }
 .chip.sm.on { background: var(--ink); color: var(--bg); }
+
+/* レシートの読み取り */
+.big-input { font-family: var(--display); font-size: 30px; letter-spacing: .02em; min-height: 58px; }
+.receipt-conf { margin-bottom: 8px; }
+.receipt-conf.high { color: var(--good); }
+.receipt-conf.low { color: var(--accent); }
