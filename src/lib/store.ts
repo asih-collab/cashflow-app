@@ -227,7 +227,7 @@ export class AppStore {
   }
 
   /** 追加・編集。残高や日付が変わったら推移に 1 点足す（同じ日は置き換え） */
-  async saveDebt(input: { id?: string; name: string; balance: number; balance_date: string; monthly_payment: number; annual_rate: number }): Promise<Debt> {
+  async saveDebt(input: { id?: string; name: string; balance: number; balance_date: string; monthly_payment: number; annual_rate: number; lumps?: Debt['lumps'] }): Promise<Debt> {
     const now = nowIso();
     const prevSum = this.debtMonthlyTotal;
     const existing = input.id ? this.debts.find((d) => d.id === input.id) : undefined;
@@ -242,6 +242,7 @@ export class AppStore {
       monthly_payment: Math.max(0, Math.trunc(input.monthly_payment) || 0),
       annual_rate: Math.max(0, Math.round((Number(input.annual_rate) || 0) * 100) / 100),
       history,
+      lumps: (input.lumps ?? existing?.lumps ?? []).filter((l) => /^\d{4}-\d{2}$/.test(l.month) && l.amount > 0).sort((a, b) => a.month.localeCompare(b.month)),
       is_active: true,
       sort_order: existing?.sort_order ?? this.debts.length,
       created_at: existing?.created_at ?? now,
@@ -259,6 +260,35 @@ export class AppStore {
     this.emit();
     this.requestSync();
     return d;
+  }
+
+  /** 一括返済の予定を足す・消す（同じ月は置き換え。amount 0 で消す） */
+  async setLump(debtId: string, month: string, amount: number): Promise<Debt | undefined> {
+    const d = this.debts.find((x) => x.id === debtId && !x.deleted_at);
+    if (!d) return undefined;
+    const lumps = (d.lumps ?? []).filter((l) => l.month !== month);
+    if (amount > 0) lumps.push({ month, amount: Math.trunc(amount), done: false });
+    return this.saveDebt({ ...d, balance: d.balance, balance_date: d.balance_date, lumps });
+  }
+
+  /** 今月までに予定していて、まだ返していない一括返済 */
+  dueLumps(today = new Date()): { debt: Debt; month: string; amount: number }[] {
+    const cur = monthKey(today);
+    return this.activeDebts.flatMap((debt) => (debt.lumps ?? []).filter((l) => !l.done && l.month <= cur).map((l) => ({ debt, month: l.month, amount: l.amount })));
+  }
+
+  /**
+   * 一括返済を「返した」にする: 返済の記録（リボ・分割返済）を 1 件足し、残高をその分減らして今日の残高にする。
+   * 実際の残高は明細で確かめて直してもらう（手数料の日割りなどでずれるため）。
+   */
+  async completeLump(debtId: string, month: string): Promise<Transaction | undefined> {
+    const d = this.debts.find((x) => x.id === debtId && !x.deleted_at);
+    const lump = d?.lumps?.find((l) => l.month === month && !l.done);
+    if (!d || !lump) return undefined;
+    const t = await this.addTransaction({ amount: lump.amount, categoryId: REPAYMENT_CATEGORY_ID, paymentMethodId: null, memo: `${d.name} 一括返済` });
+    const lumps = (d.lumps ?? []).map((l) => (l === lump ? { ...l, done: true } : l));
+    await this.saveDebt({ ...d, balance: Math.max(0, d.balance - lump.amount), balance_date: toDateString(new Date()), lumps });
+    return t;
   }
 
   async deleteDebt(id: string): Promise<void> {

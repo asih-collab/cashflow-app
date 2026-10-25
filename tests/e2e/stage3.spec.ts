@@ -64,6 +64,43 @@ test.describe('段階 3: リボ残高・ショートカット・通知', () => {
     await expect(page.getByTestId('rule-リボ返済')).toContainText('¥30,000');
   });
 
+  test('一括返済: 予定を入れると見込みに反映され、その月になるとホームに案内が出て「返した」で記録と残高が更新される', async ({ page }) => {
+    await openApp(page, '#/debts?id=new');
+    await page.getByTestId('debt-name').fill('カードA');
+    await page.getByTestId('debt-balance').fill('900000');
+    await page.getByTestId('debt-monthly').fill('30000');
+    await page.getByTestId('debt-save').tap();
+    const before = await page.getByTestId('debt-payoff').textContent();
+
+    // 先の月の予定 → 見込みが早まる
+    await page.getByTestId('debt-カードA').tap();
+    await page.getByTestId('lump-month').fill('2099-12');
+    await page.getByTestId('lump-amount').fill('300000');
+    await page.getByTestId('lump-add').tap();
+    await expect(page.getByTestId('lump-2099-12')).toContainText('¥300,000');
+    await page.goto('./#/debts');
+    await expect(page.getByTestId('debt-lump-effect')).toContainText('カードA へ ¥300,000');
+    await page.getByTestId('debt-カードA').tap();
+    await page.getByTestId('lump-remove-2099-12').tap();
+    await expect(page.getByTestId('lump-2099-12')).toHaveCount(0);
+
+    // 今月の予定 → ホームに案内
+    const month = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
+    await page.getByTestId('lump-month').fill(month);
+    await page.getByTestId('lump-amount').fill('300000');
+    await page.getByTestId('lump-add').tap();
+    await expect(page.getByTestId(`lump-${month}`)).toBeVisible();
+    await page.goto('./#/debts');
+    expect(await page.getByTestId('debt-payoff').textContent()).not.toBe(before);
+    await page.goto('./#/');
+    await expect(page.getByTestId('lump-due')).toContainText('カードA に ¥300,000');
+    page.once('dialog', (d) => void d.accept());
+    await page.getByTestId('lump-done').tap();
+    await expect(page.getByTestId('lump-due')).toHaveCount(0);
+    await expect(page.getByTestId('home-debt-total')).toHaveText('¥600,000');
+    await expect(page.getByTestId('recent-row').first()).toContainText('リボ・分割返済');
+  });
+
   test('ショートカット: #/add?amount=&cat=&save=1 で開くとそのまま保存され、開き直しても二重にならない', async ({ page }) => {
     await openApp(page, '#/add?amount=1200&cat=デート&save=1');
     await expect(page.getByTestId('toast')).toContainText('デート ¥1,200 を記録');

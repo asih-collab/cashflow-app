@@ -94,3 +94,33 @@ describe('まとめ（ホーム・サマリ用）', () => {
     expect(o.totalInterest).toBeNull();
   });
 });
+
+describe('一括返済の予定（ボーナスなど）', () => {
+  it('予定の月の返済のあとに残高から引き、完済が早まり手数料が減る', () => {
+    const without = planDebt(300000, 30000, 15, '2026-10');
+    const withLump = planDebt(300000, 30000, 15, '2026-10', [{ month: '2026-12', amount: 100000 }]);
+    expect(withLump.months!).toBeLessThan(without.months!);
+    expect(withLump.totalInterest).toBeLessThan(without.totalInterest);
+    // 11 月は通常どおり、12 月に 10 万円減る
+    const nov = withLump.schedule.find((p) => p.month === '2026-11')!.balance;
+    const dec = withLump.schedule.find((p) => p.month === '2026-12')!.balance;
+    expect(nov - dec).toBe(30000 - monthlyInterest(nov, 15) + 100000);
+  });
+  it('返済額が手数料以下でも、一括返済で終わる場合がある。済んだ予定は数えない', () => {
+    expect(planDebt(100000, 1000, 15, '2026-10', [{ month: '2026-11', amount: 101000 }]).months).toBe(1);
+    expect(planDebt(100000, 1000, 15, '2026-10', [{ month: '2026-11', amount: 100000 }]).months).toBe(2); // 手数料 1,250 の分が翌月に残る
+    const d = debt({ balance: 100000, monthly_payment: 10000, annual_rate: 0, balance_date: '2026-10-25', lumps: [{ month: '2026-12', amount: 50000, done: true }] });
+    expect(debtPlan(d).months).toBe(10);
+  });
+  it('起点より前の月で済んでいない予定は、最初の月に引く', () => {
+    expect(planDebt(100000, 10000, 0, '2026-10', [{ month: '2026-09', amount: 50000 }]).months).toBe(5);
+  });
+  it('合計の推移にも入る。withLumps = false で「しなかった場合」', () => {
+    const a = debt({ name: 'A', balance: 900000, monthly_payment: 30000, balance_date: '2026-10-25', lumps: [{ month: '2026-12', amount: 300000, done: false }] });
+    const b = debt({ name: 'B', balance: 550000, monthly_payment: 20000, balance_date: '2026-10-25' });
+    const withLump = totalPlan([a, b]);
+    const without = totalPlan([a, b], 0, false);
+    expect(withLump.months!).toBeLessThan(without.months!);
+    expect(withLump.totalInterest).toBeLessThan(without.totalInterest);
+  });
+});

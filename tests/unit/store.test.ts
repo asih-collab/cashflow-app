@@ -154,5 +154,27 @@ describe('AppStore', () => {
     await s.alignRepaymentRule();
     expect(s.repaymentRule?.amount).toBe(22000);
   });
+
+  it('一括返済: 予定を入れると見込みに入り、編集しても消えない。「返した」で返済の記録が増え、残高が減る', async () => {
+    const s = await fresh('lump');
+    const d = await s.saveDebt({ name: 'A', balance: 500000, balance_date: '2026-10-01', monthly_payment: 30000, annual_rate: 15 });
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    await s.setLump(d.id, '2099-12', 100000);
+    await s.setLump(d.id, thisMonth, 200000);
+    expect(s.activeDebts[0]!.lumps!.map((l) => l.month)).toEqual([thisMonth, '2099-12']);
+    // 残高を更新しても予定は残る
+    await s.saveDebt({ id: d.id, name: 'A', balance: 480000, balance_date: '2026-10-02', monthly_payment: 30000, annual_rate: 15 });
+    expect(s.activeDebts[0]!.lumps).toHaveLength(2);
+    expect(s.dueLumps().map((x) => x.amount)).toEqual([200000]);
+    const t = await s.completeLump(d.id, thisMonth);
+    expect(t?.amount).toBe(200000);
+    expect(t?.category_id).toBe('11111111-0013-4000-8000-000000000002');
+    expect(s.activeDebts[0]!.balance).toBe(280000);
+    expect(s.dueLumps()).toHaveLength(0);
+    expect(s.activeDebts[0]!.lumps!.find((l) => l.month === thisMonth)?.done).toBe(true);
+    // 取り消し
+    await s.setLump(d.id, '2099-12', 0);
+    expect(s.activeDebts[0]!.lumps!.map((l) => l.month)).toEqual([thisMonth]);
+  });
 });
 

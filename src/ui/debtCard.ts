@@ -2,7 +2,7 @@
 // 毎月の返済のうち、手数料に消える分と元金が減る分を 1 本の帯で見せる（2 区分なので文字でも両方出す）。
 import { h } from './dom';
 import { yen } from '../lib/money';
-import { debtOverview, monthLabel } from '../lib/debt';
+import { debtOverview, monthLabel, pendingLumps } from '../lib/debt';
 import type { AppStore } from '../lib/store';
 import { icon } from './icons';
 
@@ -31,6 +31,10 @@ export function renderDebtCard(store: AppStore, testid: string): HTMLElement | n
       h('span', null, h('i', { class: 'principal' }), '元金 ', h('b', null, yen(o.principalNow))),
       h('span', { class: 'muted' }, `/ 毎月 ${yen(o.monthly)}`),
     ),
+    (() => {
+      const next = store.activeDebts.flatMap((d) => pendingLumps(d).map((l) => ({ d, l }))).sort((a, b) => a.l.month.localeCompare(b.l.month))[0];
+      return next ? h('div', { class: 'small', style: 'margin-top:8px', 'data-testid': `${testid}-lump` }, `${monthLabel(next.l.month)}に ${next.d.name} へ ${yen(next.l.amount)} 一括返済の予定（完済見込みに反映済み）`) : null;
+    })(),
     h('div', { class: 'muted small', style: 'margin-top:6px' }, `今の残高のままだと手数料は年 ${yen(o.yearlyFee)}${o.totalInterest !== null ? ` · 完済までに ${yen(o.totalInterest)}` : ''}`),
   );
 }

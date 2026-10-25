@@ -106,6 +106,8 @@ export interface Debt {
   annual_rate: number;
   /** これまでに確認した残高（推移の表示用。古い順） */
   history: { date: string; balance: number }[];
+  /** 一括返済の予定（ボーナスなど）。month は 'YYYY-MM'。返したら done（古いデータでは無いことがある） */
+  lumps?: { month: string; amount: number; done: boolean }[];
   is_active: boolean;
   sort_order: number;
   created_at: string;

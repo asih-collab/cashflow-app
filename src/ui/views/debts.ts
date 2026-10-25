@@ -3,7 +3,7 @@
 import { h } from '../dom';
 import { yen, group } from '../../lib/money';
 import { toDateString } from '../../lib/period';
-import { daysSinceBalance, debtPlan, monthLabel, monthlyInterest, totalPlan } from '../../lib/debt';
+import { daysSinceBalance, debtPlan, monthLabel, monthlyInterest, pendingLumps, totalPlan } from '../../lib/debt';
 import type { AppContext, Route } from '../context';
 import type { Debt } from '../../lib/types';
 import { icon } from '../icons';
@@ -56,6 +56,16 @@ export function renderDebts(ctx: AppContext, route: Route): HTMLElement {
   const stale = debts.filter((d) => daysSinceBalance(d, today) > STALE_DAYS);
   if (stale.length > 0) {
     root.appendChild(h('div', { class: 'banner', 'data-testid': 'debt-stale' }, `${stale.map((d) => d.name).join('・')} の残高が 1 か月以上前のままです。明細を見て更新すると、見込みが正確になります。`));
+  }
+  // 一括返済の予定（ボーナスなど）。見込みは予定込みで、しなかった場合と比べる
+  const planned = debts.flatMap((d) => pendingLumps(d).map((l) => ({ d, l })));
+  if (planned.length > 0) {
+    const without = totalPlan(debts, 0, false);
+    const lines = planned.map(({ d, l }) => `${monthLabel(l.month)}に ${d.name} へ ${yen(l.amount)}`).join('、');
+    const effect = base.months !== null && without.months !== null
+      ? `しない場合（${monthLabel(without.payoffMonth!)}・手数料 ${yen(without.totalInterest)}）より ${without.months - base.months} か月早く、手数料が ${yen(without.totalInterest - base.totalInterest)} 少なくなります。`
+      : '';
+    root.appendChild(h('div', { class: 'banner', 'data-testid': 'debt-lump-effect' }, h('b', null, '一括返済の予定込み: '), `${lines}。${effect}`));
   }
   // 固定費の自動記録（リボ・分割返済）との突き合わせ
   const rule = store.repaymentRule;
@@ -121,6 +131,7 @@ export function renderDebts(ctx: AppContext, route: Route): HTMLElement {
         h('div', { style: 'font-weight:700' }, d.name),
         h('div', { class: 'recent-meta' }, `毎月 ${yen(d.monthly_payment)} · 年 ${d.annual_rate}%`),
         h('div', { class: 'recent-meta' }, `${p.payoffMonth ? monthLabel(p.payoffMonth) + 'に完済' : '終わらない'} · ${d.balance_date.slice(5).replace('-', '/')} 時点`),
+        pendingLumps(d).length > 0 ? h('div', { class: 'recent-meta' }, pendingLumps(d).map((l) => `${Number(l.month.slice(5))}月に ${yen(l.amount)} 一括返済`).join(' · ')) : null,
       ),
       h('span', { class: 'amount' }, yen(d.balance)),
       icon('chevron'),
@@ -162,6 +173,7 @@ function renderDebtForm(ctx: AppContext, debt: Debt | null): HTMLElement {
       ctx.navigate('/debts');
     } }, '保存'),
   );
+  if (debt) root.appendChild(renderLumps(ctx, debt, root));
   if (debt && debt.history.length > 0) {
     root.appendChild(h('h2', null, 'これまでの残高 / History'));
     root.appendChild(h('div', { class: 'card tight', 'data-testid': 'debt-history' },
@@ -177,4 +189,42 @@ function renderDebtForm(ctx: AppContext, debt: Debt | null): HTMLElement {
     } }, '消す'));
   }
   return root;
+}
+
+/** 一括返済の予定（ボーナスなど）。追加・取り消し。返したかどうかはホームの案内から */
+function renderLumps(ctx: AppContext, debt: Debt, formRoot: HTMLElement): HTMLElement {
+  const { store } = ctx;
+  const wrap = h('div', { 'data-testid': 'debt-lumps' }, h('h2', null, '一括返済の予定 / Lump sum'));
+  const lumps = debt.lumps ?? [];
+  const card = h('div', { class: 'card' });
+  if (lumps.length === 0) card.appendChild(h('p', { class: 'muted small', style: 'margin-top:0' }, 'ボーナスなどでまとめて返す予定を入れると、完済見込みに反映されます。その月になるとホームに案内が出ます。'));
+  for (const l of lumps) {
+    card.appendChild(h('div', { class: 'list-item', 'data-testid': `lump-${l.month}` },
+      h('span', { class: 'grow' }, monthLabel(l.month), l.done ? h('span', { class: 'tag' }, '返済済み') : null),
+      h('span', { class: 'amount' }, yen(l.amount)),
+      l.done ? null : h('button', { class: 'btn sm danger', type: 'button', 'data-testid': `lump-remove-${l.month}`, onClick: async () => {
+        const d = await store.setLump(debt.id, l.month, 0);
+        if (d) formRoot.replaceWith(renderDebtForm(ctx, d));
+      } }, '取り消す'),
+    ));
+  }
+  const now = new Date();
+  const defMonth = `${now.getFullYear()}-12`;
+  const monthIn = h('input', { class: 'input', type: 'month', value: defMonth, min: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, 'data-testid': 'lump-month' });
+  const amountIn = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: '0', 'data-testid': 'lump-amount' });
+  amountIn.addEventListener('blur', () => { const v = Number(amountIn.value.replace(/[^\d]/g, '')); amountIn.value = v ? group(v) : ''; });
+  card.append(
+    h('label', { class: 'field', style: 'margin-top:8px' }, h('span', null, '返す月'), monthIn),
+    h('label', { class: 'field' }, h('span', null, '金額（円）'), amountIn),
+    h('button', { class: 'btn primary', type: 'button', 'data-testid': 'lump-add', onClick: async () => {
+      const amount = Number(amountIn.value.replace(/[^\d]/g, '')) || 0;
+      if (!/^\d{4}-\d{2}$/.test(monthIn.value) || amount <= 0) { toast('月と金額を入れてください'); return; }
+      const d = await store.setLump(debt.id, monthIn.value, amount);
+      const p = d ? debtPlan(d) : null;
+      toast(`${monthLabel(monthIn.value)}に ${yen(amount)} 返す予定を入れました${p?.payoffMonth ? `。${debt.name}は ${monthLabel(p.payoffMonth)}に完済の見込み` : ''}`, { durationMs: 5000 });
+      if (d) formRoot.replaceWith(renderDebtForm(ctx, d));
+    } }, '予定に追加'),
+  );
+  wrap.appendChild(card);
+  return wrap;
 }

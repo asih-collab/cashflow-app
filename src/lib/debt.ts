@@ -1,6 +1,7 @@
 // リボ・分割の残高（F08）: 残高と毎月の返済額・年率から、完済見込み月と手数料の合計を出す。
 // 手数料は「残高 × 年率 ÷ 12」を毎月の返済から先に引く（元金定額ではなく、カード会社のリボの簡略化）。
 // 本人が明細を見て残高を更新すると、そこから計算し直す。
+// ボーナスなどでの一括返済の予定（lumps）があれば、その月の返済のあとに残高から引く。
 
 import { addMonths } from './recurring';
 import type { Debt } from './types';
@@ -22,27 +23,44 @@ export function monthlyInterest(balance: number, annualRatePct: number): number 
   return Math.round((balance * annualRatePct) / 100 / 12);
 }
 
+export interface Lump {
+  month: string;
+  amount: number;
+}
+
+/** まだ済んでいない一括返済の予定 */
+export function pendingLumps(d: Debt): Lump[] {
+  return (d.lumps ?? []).filter((l) => !l.done && l.amount > 0);
+}
+
+/** その月に引く一括返済の額（起点の月以前の予定で、まだ済んでいないものは最初の月に引く） */
+function lumpFor(lumps: Lump[], month: string, firstMonth: string): number {
+  return lumps.filter((l) => l.month === month || (month === firstMonth && l.month < firstMonth)).reduce((a, l) => a + l.amount, 0);
+}
+
 /** 1 件の返済計画。fromMonth は残高を確認した月（その翌月から返済） */
-export function planDebt(balance: number, monthly: number, annualRatePct: number, fromMonth: string): DebtPlan {
+export function planDebt(balance: number, monthly: number, annualRatePct: number, fromMonth: string, lumps: Lump[] = []): DebtPlan {
   const schedule = [{ month: fromMonth, balance: Math.max(0, balance) }];
   let b = Math.max(0, balance);
   let totalInterest = 0;
   let m = fromMonth;
+  const first = addMonths(fromMonth, 1);
   if (b === 0) return { months: 0, payoffMonth: fromMonth, totalInterest: 0, schedule };
-  if (monthly <= monthlyInterest(b, annualRatePct)) return { months: null, payoffMonth: null, totalInterest: 0, schedule };
+  if (lumps.length === 0 && monthly <= monthlyInterest(b, annualRatePct)) return { months: null, payoffMonth: null, totalInterest: 0, schedule };
   for (let i = 1; i <= MAX_MONTHS; i++) {
     m = addMonths(m, 1);
     const interest = monthlyInterest(b, annualRatePct);
     totalInterest += interest;
-    b = Math.max(0, b + interest - monthly);
+    b = Math.max(0, b + interest - monthly - lumpFor(lumps, m, first));
     schedule.push({ month: m, balance: b });
     if (b === 0) return { months: i, payoffMonth: m, totalInterest, schedule };
   }
   return { months: null, payoffMonth: null, totalInterest, schedule };
 }
 
-export function debtPlan(d: Debt, extra = 0): DebtPlan {
-  return planDebt(d.balance, d.monthly_payment + extra, d.annual_rate, d.balance_date.slice(0, 7));
+/** withLumps = false で「一括返済をしなかった場合」 */
+export function debtPlan(d: Debt, extra = 0, withLumps = true): DebtPlan {
+  return planDebt(d.balance, d.monthly_payment + extra, d.annual_rate, d.balance_date.slice(0, 7), withLumps ? pendingLumps(d) : []);
 }
 
 export interface TotalPlan {
@@ -56,12 +74,12 @@ export interface TotalPlan {
  * 全部の残高の合計の推移。extra を足すときは、年率の高いものから順に上乗せする（手数料が一番減る順）。
  * 返し終わったカードの返済額は他へ回さない（今のペースと比べたとき、違いが「上乗せした額」だけになるように）。
  */
-export function totalPlan(debts: Debt[], extra = 0): TotalPlan {
+export function totalPlan(debts: Debt[], extra = 0, withLumps = true): TotalPlan {
   const live = debts.filter((d) => !d.deleted_at && d.is_active);
   if (live.length === 0) return { months: 0, payoffMonth: null, totalInterest: 0, schedule: [] };
   const start = live.map((d) => d.balance_date.slice(0, 7)).sort()[0]!;
   const items = live
-    .map((d) => ({ d, b: Math.max(0, d.balance), from: d.balance_date.slice(0, 7) }))
+    .map((d) => ({ d, b: Math.max(0, d.balance), from: d.balance_date.slice(0, 7), lumps: withLumps ? pendingLumps(d) : [] }))
     .sort((a, b) => b.d.annual_rate - a.d.annual_rate);
   const schedule = [{ month: start, balance: items.reduce((a, x) => a + x.b, 0) }];
   let m = start;
@@ -73,7 +91,7 @@ export function totalPlan(debts: Debt[], extra = 0): TotalPlan {
       if (m <= x.from || x.b === 0) continue;
       const interest = monthlyInterest(x.b, x.d.annual_rate);
       totalInterest += interest;
-      x.b = Math.max(0, x.b + interest - x.d.monthly_payment);
+      x.b = Math.max(0, x.b + interest - x.d.monthly_payment - lumpFor(x.lumps, m, addMonths(x.from, 1)));
     }
     for (const x of items) {
       if (pool <= 0) break;
@@ -86,7 +104,7 @@ export function totalPlan(debts: Debt[], extra = 0): TotalPlan {
     schedule.push({ month: m, balance: total });
     if (total === 0) return { months: i, payoffMonth: m, totalInterest, schedule };
     // どれか 1 件でも手数料に追いつかない場合は終わらない
-    if (i === MAX_MONTHS || (extra === 0 && items.some((x) => x.b > 0 && x.d.monthly_payment <= monthlyInterest(x.b, x.d.annual_rate)))) break;
+    if (i === MAX_MONTHS || (extra === 0 && items.some((x) => x.b > 0 && x.d.monthly_payment <= monthlyInterest(x.b, x.d.annual_rate) && !x.lumps.some((l) => l.month > m)))) break;
   }
   return { months: null, payoffMonth: null, totalInterest, schedule };
 }

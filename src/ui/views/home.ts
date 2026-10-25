@@ -13,6 +13,7 @@ import { syncStatusText } from './settings';
 import { artworkElement } from '../art';
 import { icon } from '../icons';
 import { renderDebtCard } from '../debtCard';
+import { monthLabel } from '../../lib/debt';
 
 const INSTALL_DISMISSED_KEY = 'cf.installHintDismissed';
 const WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -90,6 +91,23 @@ export function renderHome(ctx: AppContext): HTMLElement {
   } else if (store.budgets.length === 0) {
     root.appendChild(h('a', { class: 'banner', href: '#/budget', 'data-testid': 'budget-hint', style: 'display:block;text-decoration:none;margin-top:16px' },
       h('b', null, '予算を決める'), h('div', { class: 'small' }, '大分類ごとに予算を決めると、ここに「今月あといくら使えるか」が出ます。'),
+    ));
+  }
+
+  // 一括返済の予定の月になったら案内（返したら記録と残高をまとめて更新）
+  for (const due of store.dueLumps()) {
+    root.appendChild(h('div', { class: 'banner', 'data-testid': 'lump-due', style: 'margin-top:16px' },
+      h('b', null, `${monthLabel(due.month)}は ${due.debt.name} に ${yen(due.amount)} を一括返済する予定です`),
+      h('div', { class: 'small' }, 'カード会社のアプリなどで返済したら「返した」を押してください。返済の記録を足し、残高をその分減らします。'),
+      h('div', { class: 'row', style: 'gap:8px;margin-top:8px' },
+        h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'lump-done', onClick: async () => {
+          if (!confirm(`${due.debt.name} に ${yen(due.amount)} 返しましたか？`)) return;
+          await store.completeLump(due.debt.id, due.month);
+          const d = store.activeDebts.find((x) => x.id === due.debt.id);
+          toast(`返済を記録し、${due.debt.name} の残高を ${yen(d?.balance ?? 0)} にしました。明細の残高と違えば直してください`, { durationMs: 7000 });
+        } }, '返した'),
+        h('a', { class: 'btn sm', href: `#/debts?id=${due.debt.id}`, style: 'text-decoration:none' }, '予定を変える'),
+      ),
     ));
   }
 
