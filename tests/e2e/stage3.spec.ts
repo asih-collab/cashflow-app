@@ -50,6 +50,8 @@ test.describe('段階 3: リボ残高・ショートカット・通知', () => {
     await page.getByTestId('rule-amount').fill('50000');
     await page.getByTestId('rule-category').selectOption({ label: 'リボ・分割返済' });
     await page.getByTestId('rule-save').tap();
+    // 保存が終わって一覧に戻ってから次へ（先に移ると、保存後の画面移動で上書きされる）
+    await expect(page.getByTestId('rule-リボ返済')).toBeVisible();
     await page.goto('./#/debts?id=new');
     await page.getByTestId('debt-name').fill('カードA');
     await page.getByTestId('debt-balance').fill('300000');
