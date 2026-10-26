@@ -229,5 +229,21 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await page.getByTestId('view-cal').tap();
     await expect(page.getByTestId('calendar')).toBeVisible();
   });
+
+  test('履歴の一覧は新しい日が上。累計は月初からの日付順の値', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-11-10T12:00:00+09:00') });
+    await openApp(page, '#/add?date=2026-11-02');
+    await tapDigits(page, '1000');
+    await page.getByTestId('cat-外食').tap();
+    await page.getByTestId('save').tap();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await record(page, '500', 'カフェ');
+    await page.goto('./#/history?v=list');
+    const days = page.locator('[data-testid^="ledger-2026"]');
+    await expect(days).toHaveCount(2);
+    await expect(days.first()).toHaveAttribute('data-testid', 'ledger-2026-11-10');
+    await expect(days.first().getByTestId('ledger-running')).toHaveText('累計 −¥1,500');
+    await expect(days.last().getByTestId('ledger-running')).toHaveText('累計 −¥1,000');
+  });
 });
 

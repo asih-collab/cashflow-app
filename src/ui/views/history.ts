@@ -1,6 +1,6 @@
 // 履歴（S3 / F11）: 月のカレンダーに日ごとの収支だけを出し、日付を押すと下にその日の詳細を開く。
 // 詳細から記録の修正（押す）と、その日付での追加ができる。選んだ日は URL（?d=）に残す。
-// 「一覧」に切り替えると、月の記録を日付順に全部並べ、日ごとの収支と累計（お金の流れ）を出す（?v=list）。
+// 「一覧」に切り替えると、月の記録を新しい日から順に全部並べ、日ごとの収支と累計（お金の流れ）を出す（?v=list）。
 import { h } from '../dom';
 import { yen } from '../../lib/money';
 import { categoryById } from '../../lib/categories';
@@ -163,7 +163,8 @@ function renderLedger(ctx: AppContext, period: Period, today: string, filter: Le
     wrap.appendChild(h('div', { class: 'card muted small' }, 'この月の記録はまだありません。'));
     return wrap;
   }
-  for (const d of days) {
+  // 新しい日を上に（累計は月初から日付順に数えた値のまま）
+  for (const d of [...days].reverse()) {
     const dt = new Date(Number(d.date.slice(0, 4)), Number(d.date.slice(5, 7)) - 1, Number(d.date.slice(8)));
     const future = d.date > today;
     wrap.appendChild(h('div', { class: 'ledger-day' + (future ? ' future' : '') + (d.date === today ? ' today' : ''), 'data-testid': `ledger-${d.date}` },
