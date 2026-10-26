@@ -38,7 +38,13 @@ export function normalize(s: string): string {
   // 数字の間の空白（「1, 234」「1 234」）をつめる。¥ の後の空白も
   t = t.replace(/(\d)\s*,\s*(?=\d{3}\b)/g, '$1,').replace(/¥\s+/g, '¥');
   // 数字に挟まれた O / o / l / I / | は 0 / 1 の読み違い
+  // ¥ の直後に紛れ込んだ 1 文字（「¥ギ80」など、カメラの文字認識で起きる）を消す
+  t = t.replace(/¥\s?[^\d\s,.\-¥](?=\s?\d)/g, '¥');
+  // 行頭の ¥ が似た字（寺・半・羊・平・Y）に読まれた金額だけの行
+  t = t.replace(/^(\s*)[寺半羊芋平Y¥](?=\s?\d[\d,.\s]*(?:円)?\s*$)/gm, '$1¥');
   t = t.replace(/(?<=¥|\d)[\dOolI|,]+/g, (m) => m.replace(/[Oo]/g, '0').replace(/[lI|]/g, '1'));
+  // 「1, 010」のように桁区切りの後に空白
+  t = t.replace(/(\d),\s+(?=\d{3}(?!\d))/g, '$1,');
   return t;
 }
 
@@ -218,14 +224,53 @@ export function findDate(text: string, today = new Date()): string | null {
     [/(?<![\d¥,])(\d{2})\s*[/.\-]\s*(\d{1,2})\s*[/.\-]\s*(\d{1,2})(?![\d,])/g, (m) => [2000 + Number(m[1]), Number(m[2]), Number(m[3])]],
     [/(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日/g, (m) => [today.getFullYear(), Number(m[1]), Number(m[2])]],
   ];
+  let found: string | null = null;
   for (const [re, f] of patterns) {
     for (const m of t.matchAll(re)) {
       const [y, mo, d] = f(m);
       const v = validDate(y, mo, d, today) ?? (re.source.startsWith('(?<!\\d)(\\d{1,2})\\s*月') ? validDate(y - 1, mo, d, today) : null);
-      if (v) return v;
+      if (v) { found = v; break; }
     }
+    if (found) break;
   }
-  return null;
+  // 見つからない・古すぎる（2 か月以上前）ときは、数字の読み違い（9→0 など）を直した候補から、最近の日付を探す
+  if (!found || ageDays(found, today) > 60) {
+    const fuzzy = fuzzyDate(t, today);
+    if (fuzzy) return fuzzy;
+  }
+  return found;
+}
+
+function ageDays(date: string, today: Date): number {
+  const [y, m, d] = date.split('-').map(Number);
+  return (new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - new Date(y!, m! - 1, d!).getTime()) / 86400000;
+}
+
+/** カメラの文字認識で起きやすい数字の読み違い */
+const CONFUSE: Record<string, string[]> = { '9': ['0'], '6': ['0', '8'], '8': ['0', '3', '6'], '3': ['8'], '0': ['8', '6', '9'], '7': ['1'], '1': ['7'], '5': ['6'] };
+
+function variants(digits: string): string[] {
+  let out = [''];
+  for (const ch of digits) out = out.flatMap((p) => [ch, ...(CONFUSE[ch] ?? [])].map((c) => p + c));
+  return out;
+}
+
+function fuzzyDate(t: string, today: Date): string | null {
+  const best: { v: string; cost: number; age: number }[] = [];
+  const consider = (y: number, mo: string, d: string) => {
+    for (const m2 of variants(mo)) for (const d2 of variants(d)) {
+      const v = validDate(y, Number(m2), Number(d2), today);
+      if (!v) continue;
+      const age = ageDays(v, today);
+      if (age > 60) continue;
+      const cost = [...m2].filter((c, i) => c !== mo[i]).length + [...d2].filter((c, i) => c !== d[i]).length;
+      best.push({ v, cost, age });
+    }
+  };
+  for (const m of t.matchAll(/(20\d{2})\D{1,2}(\d{1,2})\D{1,2}(\d{1,2})/g)) consider(Number(m[1]), m[2]!, m[3]!);
+  for (const m of t.matchAll(/(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日/g)) consider(today.getFullYear(), m[1]!, m[2]!);
+  best.sort((a, b) => a.cost - b.cost || a.age - b.age);
+  return best[0]?.v ?? null;
 }
 
 /** よく行くお店の名前（文字認識の読み方の揺れも）。見つかったらその名前で表示する */

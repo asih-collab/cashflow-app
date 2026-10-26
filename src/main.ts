@@ -191,3 +191,11 @@ void boot().catch((e) => {
   const view = document.getElementById('view');
   if (view) view.textContent = `起動に失敗しました: ${e instanceof Error ? e.message : String(e)}`;
 });
+
+// 自動テスト用（e2e のビルドだけ）: 文字認識と読み取りを直接呼べるようにする
+if (import.meta.env.MODE === 'e2e') {
+  void Promise.all([import('./lib/ocr'), import('./lib/receipt')]).then(([o, r]) => {
+    (window as unknown as Record<string, unknown>).__receipt = { recognizeReceipt: o.recognizeReceipt, recognizeReceiptTwice: o.recognizeReceiptTwice, parseReceipt: r.parseReceipt };
+  });
+}
+

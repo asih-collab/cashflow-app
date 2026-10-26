@@ -401,3 +401,6 @@ a.advice-title::after { content: " →"; color: var(--muted); font-weight: 400; 
 .receipt-conf { margin-bottom: 8px; }
 .receipt-conf.high { color: var(--good); }
 .receipt-conf.low { color: var(--accent); }
+.ocr-progress { margin: 4px 0 12px; }
+.ocr-bar { height: 4px; background: var(--line-strong); border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.ocr-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }

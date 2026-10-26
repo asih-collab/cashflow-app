@@ -1,6 +1,7 @@
 // レシートの読み取り（#/receipt、#/receipt?text=...）。
-// iPhone の文字認識で取り出した文字（ショートカットから渡す、または貼り付け）から、合計・日付・お店・支払い方法を読み取り、
-// 確かめてから 1 件の記録として保存する。画像は扱わない（文字認識は iPhone の中で済む）。
+// 1. アプリ内のカメラで撮る（いちばん簡単）: 画像はこの端末の中だけで文字にし、保存しない（カメラロールにも残らない）
+// 2. ショートカット / 写真の「テキスト認識」で取り出した文字を受け取る・貼り付ける（iPhone の文字認識。いちばん正確）
+// どちらも、文字から合計・日付・お店・支払い方法を読み取り、確かめてから 1 件の記録として保存する。
 import { h } from '../dom';
 import { group, yen } from '../../lib/money';
 import { parseReceipt, type ReceiptResult } from '../../lib/receipt';
@@ -14,19 +15,55 @@ import { toast } from '../toast';
 const CONF_LABEL: Record<ReceiptResult['confidence'], string> = { high: '読み取り: 確か', medium: '読み取り: たぶん', low: '読み取り: 要確認' };
 
 export function renderReceipt(ctx: AppContext, route: Route): HTMLElement {
-  const { store } = ctx;
   const root = h('div', { 'data-testid': 'receipt' },
     h('div', { class: 'row' }, h('a', { href: '#/add', style: 'display:inline-flex', 'aria-label': '戻る' }, icon('back')), h('h1', { class: 'grow', style: 'margin:0 0 0 8px' }, 'レシートから記録')),
   );
   const input = h('textarea', { class: 'input', rows: 6, placeholder: 'ここにレシートの文字を貼り付け', 'data-testid': 'receipt-text', style: 'min-height:120px;font-size:14px' });
   const result = h('div', { 'data-testid': 'receipt-result' });
+  const show = (text: string, r: ReceiptResult, fromCamera: boolean) => {
+    ctx.busy.entering = true;
+    result.replaceChildren(renderForm(ctx, text, r, fromCamera ? retake : null));
+    result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const read = () => {
     const text = input.value.trim();
     if (!text) { toast('レシートの文字を貼り付けてください'); return; }
-    ctx.busy.entering = true;
-    result.replaceChildren(renderForm(ctx, text, parseReceipt(text)));
-    result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    show(text, parseReceipt(text), false);
   };
+
+  // ---- アプリ内のカメラ ----
+  const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, 'data-testid': 'receipt-camera' });
+  const library = h('input', { type: 'file', accept: 'image/*', hidden: true, 'data-testid': 'receipt-library' });
+  const bar = h('i');
+  const status = h('div', { class: 'small muted', 'data-testid': 'receipt-status' });
+  const progress = h('div', { class: 'ocr-progress', hidden: true, 'data-testid': 'receipt-progress' }, h('div', { class: 'ocr-bar' }, bar), status);
+  const shoot = h('button', { class: 'btn primary big', type: 'button', 'data-testid': 'receipt-shoot', onClick: () => camera.click() }, icon('receipt'), 'カメラで撮る');
+  function retake(): void { camera.click(); }
+  async function onImage(file: File | undefined): Promise<void> {
+    if (!file) return;
+    shoot.disabled = true;
+    progress.hidden = false;
+    result.replaceChildren();
+    try {
+      const { recognizeReceiptTwice } = await import('../../lib/ocr');
+      const { primary, combined } = await recognizeReceiptTwice(file, (ratio, label) => {
+        bar.style.width = `${Math.round(ratio * 100)}%`;
+        status.textContent = label;
+      });
+      input.value = primary.trim();
+      show(combined, parseReceipt(combined), true);
+    } catch (e) {
+      toast(`読み取れませんでした（${e instanceof Error ? e.message : String(e)}）。通信のよい所でもう一度試してください`, { durationMs: 7000 });
+    } finally {
+      shoot.disabled = false;
+      progress.hidden = true;
+      camera.value = '';
+      library.value = '';
+    }
+  }
+  camera.addEventListener('change', () => void onImage(camera.files?.[0]));
+  library.addEventListener('change', () => void onImage(library.files?.[0]));
+
   const pasteBtn = h('button', { class: 'btn', type: 'button', 'data-testid': 'receipt-paste', onClick: async () => {
     try {
       input.value = await navigator.clipboard.readText();
@@ -39,17 +76,22 @@ export function renderReceipt(ctx: AppContext, route: Route): HTMLElement {
   const readBtn = h('button', { class: 'btn primary', type: 'button', 'data-testid': 'receipt-read', onClick: read }, '読み取る');
 
   root.append(
-    h('details', { class: 'card', open: !route.params.get('text') ? true : undefined, style: 'padding:12px 18px' },
-      h('summary', { class: 'small' }, 'レシートの文字の取り出し方'),
-      h('ol', { class: 'small', style: 'line-height:1.8;padding-left:1.2em;margin:8px 0 0' },
-        h('li', null, 'ショートカット「レシートを記録」を使うと、撮るだけでこの画面に読み取った内容が出ます（作り方は「使い方」）'),
-        h('li', null, 'または、カメラでレシートを撮り、写真を開いて右下の「テキスト認識」ボタン → 文字を長押し →「すべてを選択」→「コピー」。この画面に戻って「貼り付けて読み取る」'),
-      ),
+    camera, library,
+    shoot,
+    h('div', { class: 'small muted', style: 'margin:8px 2px 4px;line-height:1.7' },
+      'うまく読むコツ: 明るい所で、レシートを平らにして画面いっぱいに、真上からまっすぐ撮る。影や折り目がないほど正確です。撮った写真は保存されません。'),
+    h('div', { class: 'row', style: 'gap:8px;margin:6px 0 12px' },
+      h('button', { class: 'btn sm', type: 'button', 'data-testid': 'receipt-pick', onClick: () => library.click() }, '写真から選ぶ'),
     ),
-    h('div', { class: 'row', style: 'gap:8px;margin:4px 0 8px' }, pasteBtn),
-    input,
-    h('div', { class: 'row', style: 'justify-content:flex-end;margin:8px 0 4px' }, readBtn),
+    progress,
     result,
+    h('details', { class: 'card', style: 'padding:12px 18px;margin-top:16px' },
+      h('summary', { class: 'small' }, 'もっと正確に: iPhone の文字認識を使う'),
+      h('p', { class: 'small muted', style: 'margin:8px 0' }, 'iPhone の文字認識はアプリ内のカメラより正確です。ショートカット「レシートを記録」（作り方は「使い方」。撮った写真はカメラロールに残りません）か、写真の「テキスト認識」で文字をコピーして、ここに貼り付けます。'),
+      h('div', { class: 'row', style: 'gap:8px;margin:4px 0 8px' }, pasteBtn),
+      input,
+      h('div', { class: 'row', style: 'justify-content:flex-end;margin:8px 0 4px' }, readBtn),
+    ),
   );
   const fromShortcut = route.params.get('text');
   if (fromShortcut) {
@@ -60,7 +102,7 @@ export function renderReceipt(ctx: AppContext, route: Route): HTMLElement {
   return root;
 }
 
-function renderForm(ctx: AppContext, text: string, r: ReceiptResult): HTMLElement {
+function renderForm(ctx: AppContext, text: string, r: ReceiptResult, retake: (() => void) | null): HTMLElement {
   const { store } = ctx;
   const today = toDateString(new Date());
   const guessCat = guessCategory(r.store, text, store.categories, store.transactions);
@@ -93,6 +135,10 @@ function renderForm(ctx: AppContext, text: string, r: ReceiptResult): HTMLElemen
   const card = h('div', { class: 'card', 'data-testid': 'receipt-form', style: 'margin-top:12px' },
     h('div', { class: `mono receipt-conf ${r.confidence}`, 'data-testid': 'receipt-conf' }, CONF_LABEL[r.confidence]),
     !r.total ? h('p', { class: 'small', style: 'margin:6px 0' }, '合計金額が読み取れませんでした。金額を入れてください。') : null,
+    retake && r.confidence === 'low'
+      ? h('div', { class: 'banner', 'data-testid': 'receipt-retake' }, '読み取りにくかったようです。明るい所で、レシートを画面いっぱいにまっすぐ撮り直すと、読み取りやすくなります。',
+        h('div', { style: 'margin-top:8px' }, h('button', { class: 'btn sm primary', type: 'button', onClick: retake }, '撮り直す')))
+      : null,
     h('label', { class: 'field' }, h('span', null, '合計金額（円）'), amountIn),
     others.length > 0 && r.confidence !== 'high'
       ? h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;margin:-4px 0 10px' }, h('span', { class: 'muted small' }, 'ほかの候補:'),

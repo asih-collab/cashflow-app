@@ -13,9 +13,10 @@ const files = [];
   }
 })(dist);
 
-const assets = files.filter((f) => f !== 'sw.js' && !f.endsWith('.map')).map((f) => './' + f.split('\\').join('/'));
+// ocr/ は大きいので先読みしない（使ったときに Service Worker が残す）
+const assets = files.filter((f) => f !== 'sw.js' && !f.endsWith('.map') && !f.split('\\').join('/').startsWith('ocr/')).map((f) => './' + f.split('\\').join('/'));
 const hash = createHash('sha256');
-for (const f of files.filter((f) => f !== 'sw.js').sort()) hash.update(f).update(readFileSync(join(dist, f)));
+for (const f of files.filter((f) => f !== 'sw.js' && !f.startsWith('ocr')).sort()) hash.update(f).update(readFileSync(join(dist, f)));
 const version = hash.digest('hex').slice(0, 12);
 
 const template = readFileSync(new URL('../src/sw.js', import.meta.url), 'utf8');

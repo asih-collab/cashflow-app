@@ -14,7 +14,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== OCR_CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
   );
 });
 
@@ -27,8 +27,23 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(staleWhileRevalidate(new Request(indexUrl()), req));
     return;
   }
+  // 文字認識の部品（ocr/）は大きいので、最初に使ったときに別のキャッシュに残す（版が変わっても消さない）
+  if (url.pathname.includes('/ocr/')) {
+    event.respondWith(ocrCache(req));
+    return;
+  }
   event.respondWith(cacheFirst(req));
 });
+
+const OCR_CACHE = 'cashflow-ocr-v1';
+async function ocrCache(req) {
+  const c = await caches.open(OCR_CACHE);
+  const hit = await c.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok) c.put(req, res.clone());
+  return res;
+}
 
 function indexUrl() {
   return new URL('./index.html', self.registration.scope).toString();
