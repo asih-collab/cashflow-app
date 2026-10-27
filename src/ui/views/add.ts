@@ -4,7 +4,8 @@
 
 import { h } from '../dom';
 import { group, yen } from '../../lib/money';
-import { periodFor, toDateString } from '../../lib/period';
+import { periodFor, shiftPeriod, toDateString } from '../../lib/period';
+import { preSpend } from '../../lib/preSpend';
 import { statsFor } from '../../lib/stats';
 import { childrenOf, parentsOf, categoryById } from '../../lib/categories';
 import type { AppContext, Route } from '../context';
@@ -65,6 +66,9 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
 
   const display = h('div', { class: 'display empty', 'data-testid': 'amount' }, h('span', { class: 'yen' }, '¥'), '0');
   root.appendChild(display);
+  // 使う前に見せる（予算の残り・今日の目安・チャレンジ・手取りで何時間分）
+  const preview = h('div', { class: 'preview', 'data-testid': 'pre-spend', 'aria-live': 'polite' });
+  root.appendChild(preview);
 
   const cats = h('div', { class: 'cats', 'data-testid': 'categories' });
   root.appendChild(cats);
@@ -77,7 +81,7 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
   // （ホーム画面アプリは裏に残るので、前日に開いた記録画面のまま翌日に保存すると前日の日付になってしまうため）
   let dateTouched = false;
   dateInput.addEventListener('input', () => { dateTouched = true; });
-  dateInput.addEventListener('change', () => { dateTouched = true; });
+  dateInput.addEventListener('change', () => { dateTouched = true; update(); });
   const dateToSave = (): string => (fixedDate || dateTouched ? dateInput.value || toDateString(new Date()) : toDateString(new Date()));
   const pmSelect = h('select', { class: 'input', 'data-testid': 'payment-method' });
   for (const p of store.activePaymentMethods) {
@@ -186,6 +190,25 @@ export function renderAdd(ctx: AppContext, route: Route): HTMLElement {
     saveBtn.disabled = saving || a <= 0 || !selected;
     const verb = editing ? 'に更新' : 'を保存';
     saveBtn.textContent = selected && a > 0 ? `${selected.name} ${mode === 'income' ? '+' : ''}${yen(a)} ${verb}` : editing ? '更新' : mode === 'income' ? '収入を保存' : '保存';
+    renderPreview(a);
+  }
+
+  function renderPreview(a: number): void {
+    preview.replaceChildren();
+    if (mode !== 'expense' || !selected || a <= 0) return;
+    const now = new Date();
+    const p = periodFor(now, store.settings.month_start_day);
+    const ps = preSpend({
+      transactions: store.transactions, categories: store.categories, budgets: store.budgets, challenges: store.activeChallenges, rules: store.recurringRules,
+      period: p, prev: shiftPeriod(p, 1, store.settings.month_start_day), today: now, categoryId: selected.id, amount: a, date: dateToSave(), excludeId: editing?.id,
+    });
+    const parts: (Node | string)[] = [];
+    const sep = () => { if (parts.length) parts.push(' · '); };
+    if (ps.budget) { sep(); parts.push(`${ps.budget.name}の残り ${yen(ps.budget.before)} → `, h('b', { class: ps.budget.after < 0 ? 'warn' : '' }, ps.budget.after < 0 ? `${yen(-ps.budget.after)} 超過` : yen(ps.budget.after))); }
+    if (ps.allowanceLeft !== null) { sep(); parts.push('今日の目安 ', h('b', { class: ps.allowanceLeft < 0 ? 'warn' : '' }, ps.allowanceLeft < 0 ? `${yen(-ps.allowanceLeft)} 超え` : `あと ${yen(ps.allowanceLeft)}`)); }
+    for (const c of ps.challenges) { sep(); parts.push(`${c.name} `, h('b', { class: c.over ? 'warn' : '' }, `${c.text}${c.over ? ' 超過' : c.reached ? ' 上限' : ''}`)); }
+    if (ps.hours !== null) { sep(); parts.push('手取りで約 ', h('b', null, `${ps.hours} 時間分`)); }
+    preview.append(...parts);
   }
 
   async function remove(): Promise<void> {

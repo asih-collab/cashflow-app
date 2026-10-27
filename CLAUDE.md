@@ -13,7 +13,7 @@
 | データ | IndexedDB（端末が正）+ Supabase（Postgres, RLS） | `supabase/migrations/`、`supabase/README.md` |
 | 通知 | Web プッシュ。Edge Function `notify`（`supabase/functions/notify/`、WebCrypto だけで暗号化と署名）を pg_cron が毎日呼ぶ。端末側は `src/lib/push.ts` と `src/sw.js` の push イベント | `scripts/setup-push.mjs` で鍵・配備・予定を反映 |
 | 公開 | GitHub Pages（`main` への push で GitHub Actions が test → build → `gh-pages` ブランチへ配置。Pages はそのブランチを公開する） | `.github/workflows/deploy.yml` |
-| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=&d=&v=&f=` 履歴（カレンダー。`d` は選んだ日。`v=list` で一覧、`f=expense|income` で絞り込み）、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/debts?id=` リボ・分割の残高、`#/receipt?text=` レシートの読み取り（アプリ内のカメラ + Tesseract（`src/lib/ocr.ts`、部品は `dist/ocr/`）、または iPhone の文字認識の文字）、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート&save=1`（ショートカット用。`save=1` で開いた瞬間に保存）や `#/add?copy=<記録の ID>`（コピー）や `#/add?date=YYYY-MM-DD&type=income&ret=<戻り先>` で値を渡せる（`ret` は保存後の戻り先） | `src/main.ts` |
+| ルーティング | ハッシュ（`#/` ホーム、`#/add` 記録、`#/edit?id=` 修正、`#/history?p=&d=&v=&f=` 履歴（カレンダー。`d` は選んだ日。`v=list` で一覧、`f=expense|income` で絞り込み）、`#/summary?p=` サマリ、`#/budget?p=` 予算、`#/recurring` 固定費・定期の収入、`#/debts?id=` リボ・分割の残高、`#/goals?id=&ch=` 貯金の目標・節約のチャレンジ（鍵付きの目標は `src/lib/privacy.ts`）、`#/receipt?text=` レシートの読み取り（アプリ内のカメラ + Tesseract（`src/lib/ocr.ts`、部品は `dist/ocr/`）、または iPhone の文字認識の文字）、`#/settings`、`#/categories`、`#/login`、`#/handoff`）。`p` は予算期間の初日。`#/add?amount=1200&cat=デート&save=1`（ショートカット用。`save=1` で開いた瞬間に保存）や `#/add?copy=<記録の ID>`（コピー）や `#/add?date=YYYY-MM-DD&type=income&ret=<戻り先>` で値を渡せる（`ret` は保存後の戻り先） | `src/main.ts` |
 
 公開 URL: `https://asih-collab.github.io/cashflow-app/`（`vite.config.ts` の `base` と一致させる）
 
@@ -66,6 +66,7 @@ CI では `.github/workflows/deploy.yml` の `test` ジョブが同じことを�
 - 初期データ（カテゴリ・支払い手段）は固定 UUID・固定の古い時刻。別端末で先に使っていた場合にそちらが勝つため
 - 削除は論理削除（`deleted_at`）
 - ホームは予算がある月は「あと使える額」、ない月は「今月の変動費合計」が主役
+- テストの数字・名前は作り物にする（本人の残高・計画・目標の名前を公開リポジトリに入れない）
 - 自動計上の記録 ID は「ルール ID + 年月」、予算の ID は「大分類 + 期間の初日」から決める（複数端末で重複させないため）。この仕組みを変えるときは二重計上のテスト（`tests/unit/recurring.test.ts`、`sync.test.ts`）を必ず通す
 
 ## 作業の記録

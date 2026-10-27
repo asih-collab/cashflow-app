@@ -159,6 +159,25 @@ function frequency(c: AdviceContext): Advice[] {
   return out;
 }
 
+/** 黒字の見込み → 貯金の目標に回すと、届くのがどれだけ早まるか */
+function surplusToGoal(c: AdviceContext): Advice[] {
+  if (c.income <= 0 || c.warmingUp || c.balanceForecast < LIMITS.surplusMin) return [];
+  const out: Advice[] = [];
+  for (const g of c.goals) {
+    if (!g.reachMonth || !g.reachWithSurplus || g.reachWithSurplus >= g.reachMonth) continue;
+    const surplus = Math.floor(c.balanceForecast / 1000) * 1000;
+    const [ay, am] = g.reachWithSurplus.split('-').map(Number);
+    const [by, bm] = g.reachMonth.split('-').map(Number);
+    const months = (by! - ay!) * 12 + (bm! - am!);
+    out.push({
+      rule: 'surplus_to_goal', key: `surplus_to_goal:${g.name}`, level: 'good', priority: 72, href: '#/goals',
+      title: `黒字見込みを${g.name}に回すと ${months} か月早く届きます`,
+      body: `月末に約 ${yen(c.balanceForecast)} の黒字見込み。このうち ${yen(surplus)} を入れると、${monthLabel(g.reachMonth)} → ${monthLabel(g.reachWithSurplus)} です。`,
+    });
+  }
+  return out;
+}
+
 /** 黒字の見込み → 返済に回すと完済がどれだけ早まるか */
 function surplusToDebt(c: AdviceContext): Advice[] {
   // 始まって間もないうちは見込みが予算頼みなので、実績がたまってから出す
@@ -224,7 +243,7 @@ function goodPace(c: AdviceContext): Advice[] {
 
 /** 上から順に評価する（並びは priority で決まるので、ここの順は関係ない） */
 export const RULES: ((c: AdviceContext) => Advice[])[] = [
-  deficitForecast, overBudget, budgetPace, categoryJump, unitPriceUp, frequency, surplusToDebt, revoFee, missingRecords, goodPace,
+  deficitForecast, overBudget, budgetPace, categoryJump, unitPriceUp, frequency, surplusToDebt, surplusToGoal, revoFee, missingRecords, goodPace,
 ];
 
 // ---- 今日の気づき（日ごと） --------------------------------------------------------
@@ -244,6 +263,8 @@ export const DAILY_LIMITS = {
   weekdayRatio: 1.5,
   weekdayMin: 3000,
   weekdaySamples: 3,
+  /** チャレンジ: 上限の何割から知らせるか */
+  challengeNear: 0.8,
 } as const;
 
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
@@ -349,4 +370,14 @@ function payday(c: DailyContext): Advice[] {
   }];
 }
 
-export const DAILY_RULES: ((c: DailyContext) => Advice[])[] = [dailyAllowance, yesterdayRecap, repeatToday, bigPurchase, weekdayPeak, upcomingFixed, payday];
+/** 節約のチャレンジ: 上限に近い・達した・超えた */
+function challengeAlert(c: DailyContext): Advice[] {
+  return c.challenges.filter((x) => x.ratio >= DAILY_LIMITS.challengeNear).map((x) => ({
+    rule: 'challenge_alert', key: `challenge_alert:${x.name}:${c.today}`, level: x.over || x.reached ? 'warn' as const : 'info' as const,
+    priority: x.over ? 92 : x.reached ? 88 : 68, href: '#/goals',
+    title: x.over ? `${x.name}: 上限を超えています（${x.text}）` : x.reached ? `${x.name}: 今月はここまで（${x.text}）` : `${x.name}: 上限に近づいています（${x.text}）`,
+    body: x.over || x.reached ? '今月の残りは、この分はお休みにしましょう。浮いた分は貯金の目標に回せます。' : '使う前に、本当に今月必要か考えてみましょう。',
+  }));
+}
+
+export const DAILY_RULES: ((c: DailyContext) => Advice[])[] = [dailyAllowance, yesterdayRecap, repeatToday, bigPurchase, weekdayPeak, upcomingFixed, payday, challengeAlert];

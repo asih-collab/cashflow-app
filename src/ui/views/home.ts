@@ -13,6 +13,9 @@ import { syncStatusText } from './settings';
 import { artworkElement } from '../art';
 import { icon } from '../icons';
 import { renderDebtCard } from '../debtCard';
+import { goalCard } from './goals';
+import { goalLabel } from '../../lib/goal';
+import { challengeStatus, formatChallenge } from '../../lib/challenge';
 import { monthLabel } from '../../lib/debt';
 import { HOME_ADVICE_COUNT, renderAdviceList, renderDailyAdviceList } from '../adviceList';
 
@@ -78,6 +81,37 @@ export function renderHome(ctx: AppContext): HTMLElement {
   if (daily) {
     root.appendChild(h('h2', null, '今日の気づき / Today'));
     root.appendChild(daily);
+  }
+
+  // 貯金の目標と、節約のチャレンジ
+  if (store.visibleGoals.length > 0 || store.activeChallenges.length > 0) {
+    root.appendChild(h('div', { class: 'row', style: 'margin-top:28px' }, h('h2', { class: 'grow', style: 'margin:0' }, '目標 / Goals'), h('a', { class: 'btn sm', href: '#/goals', style: 'text-decoration:none;margin-left:10px' }, '見る')));
+    const wrap = h('div', { style: 'margin-top:10px' });
+    for (const g of store.visibleGoals) wrap.appendChild(goalCard(ctx, g, 'home-goal', `#/goals?id=${g.id}`));
+    if (store.activeChallenges.length > 0) {
+      const card = h('a', { class: 'card tight row-link', href: '#/goals', 'data-testid': 'home-challenges', style: 'display:block' });
+      for (const c of store.activeChallenges) {
+        const s = challengeStatus(c, store.transactions, period);
+        card.appendChild(h('div', { class: 'list-item', style: 'min-height:44px;padding:10px 0' },
+          h('span', { class: 'grow' }, c.name),
+          h('span', { class: 'mono' + (s.over ? ' over' : s.reached ? ' reached' : '') }, `${formatChallenge(s, c.kind)}${s.over ? ' 超過' : s.reached ? ' 上限' : ''}`)));
+      }
+      wrap.appendChild(card);
+    }
+    root.appendChild(wrap);
+  }
+  // 目標への入金の予定の月になったら案内
+  for (const due of store.dueGoalExtras()) {
+    root.appendChild(h('div', { class: 'banner', 'data-testid': 'goal-extra-due', style: 'margin-top:12px' },
+      h('b', null, `${monthLabel(due.month)}は ${goalLabel(due.goal)} に ${yen(due.amount)} を入れる予定です`),
+      h('div', { class: 'row', style: 'gap:8px;margin-top:8px' },
+        h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'goal-extra-done', onClick: async () => {
+          await store.completeGoalExtra(due.goal.id, due.month);
+          toast(`${goalLabel(due.goal)}に ${yen(due.amount)} を入金として記録しました`);
+        } }, '入金した'),
+        h('a', { class: 'btn sm', href: `#/goals?id=${due.goal.id}`, style: 'text-decoration:none' }, '予定を変える'),
+      ),
+    ));
   }
 
   // 予算（大分類ごとの残り）

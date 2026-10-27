@@ -4,11 +4,15 @@ import type { Db } from './db';
 import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
 import { toDateString } from './period';
-import type { AdviceFeedback, Budget, Category, Debt, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
-import { dueRecurringTransactions, monthKey, postingDate } from './recurring';
+import type { AdviceFeedback, Budget, Category, Challenge, Debt, Goal, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
+import { addMonths, dueRecurringTransactions, monthKey, postingDate } from './recurring';
 import { budgetId } from './budget';
 import { REPAYMENT_CATEGORY_ID } from './debt';
+import { goalHidden } from './goal';
 import type { Syncer } from './sync';
+
+/** 「貯蓄・投資」の大分類（初期カテゴリの固定 ID）。貯金の目標の中分類はこの下に作る */
+export const SAVINGS_PARENT_ID = '11111111-0014-4000-8000-000000000000';
 
 export interface ReceiptStats {
   /** 読み取った回数 */
@@ -62,11 +66,13 @@ export class AppStore {
   budgets: Budget[] = [];
   debts: Debt[] = [];
   adviceFeedback: AdviceFeedback[] = [];
+  goals: Goal[] = [];
+  challenges: Challenge[] = [];
   settings: Settings = { ...DEFAULT_SETTINGS };
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly db: Db, private syncer: Syncer | null = null) {}
+  constructor(readonly db: Db, private syncer: Syncer | null = null) {}
 
   attachSyncer(s: Syncer): void {
     this.syncer = s;
@@ -109,6 +115,8 @@ export class AppStore {
     this.budgets = await this.db.getAll<Budget>('budgets');
     this.debts = await this.db.getAll<Debt>('debts');
     this.adviceFeedback = await this.db.getAll<AdviceFeedback>('advice_feedback');
+    this.goals = await this.db.getAll<Goal>('goals');
+    this.challenges = await this.db.getAll<Challenge>('challenges');
     this.settings = { ...DEFAULT_SETTINGS, ...((await this.db.get<Settings>('settings', 'me')) ?? {}) };
     this.emit();
   }
@@ -226,6 +234,134 @@ export class AppStore {
       if (o.categoryOk) s.categoryOk++;
     }
     await this.db.put('meta', s, 'receipt-stats');
+  }
+
+  // ---- 貯金の目標 -------------------------------------------------------------
+
+  get activeGoals(): Goal[] {
+    return this.goals.filter((g) => !g.deleted_at && g.is_active).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+  }
+
+  /** 鍵が閉じているときに見せる目標（鍵付きは除く） */
+  get visibleGoals(): Goal[] {
+    return this.activeGoals.filter((g) => !goalHidden(g));
+  }
+
+  /**
+   * 目標を作る: 「貯蓄・投資」の下に中分類を作り、毎月の先取りがあれば固定費の自動記録も作る。
+   * 鍵付き（private）なら、中分類と自動記録には別名（alias）を使い、目標の名前はほかの画面に出さない。
+   */
+  async createGoal(input: { name: string; target: number; monthly: number; day?: number; paymentMethodId?: string | null; startMonth?: string; private?: boolean; alias?: string }): Promise<Goal> {
+    const parent = this.categories.find((c) => c.id === SAVINGS_PARENT_ID)!;
+    const alias = (input.alias ?? '').trim() || '貯金';
+    const catName = input.private ? alias : input.name.trim();
+    const cat = this.categories.find((c) => c.parent_id === parent.id && c.name === catName && !c.deleted_at) ?? (await this.addSubcategory(parent.id, catName));
+    const now = nowIso();
+    const g: Goal = {
+      id: uuid(), name: input.name.trim(), target: Math.max(0, Math.trunc(input.target)), category_id: cat.id,
+      assets: [], extras: [], increases: [], is_private: !!input.private, alias, is_active: true, sort_order: this.goals.length, created_at: now, updated_at: now, deleted_at: null,
+    };
+    this.goals.push(g);
+    await this.save('goals', g);
+    if (input.monthly > 0) {
+      await this.saveRule({ name: `${catName}（先取り）`, amount: input.monthly, type: 'expense', category_id: cat.id, payment_method_id: input.paymentMethodId ?? null, day_of_month: input.day ?? 25, needs_review: false, start_month: input.startMonth ?? addMonths(monthKey(new Date()), 1) });
+    }
+    this.emit();
+    this.requestSync();
+    return g;
+  }
+
+  async updateGoal(id: string, patch: Partial<Pick<Goal, 'name' | 'target' | 'assets' | 'extras' | 'increases'>>): Promise<Goal | undefined> {
+    const g = this.goals.find((x) => x.id === id && !x.deleted_at);
+    if (!g) return undefined;
+    Object.assign(g, patch, { updated_at: nowIso() });
+    if (patch.extras) g.extras = [...patch.extras].sort((a, b) => a.month.localeCompare(b.month));
+    if (patch.increases) g.increases = [...patch.increases].sort((a, b) => a.from.localeCompare(b.from));
+    await this.save('goals', g);
+    this.emit();
+    this.requestSync();
+    return g;
+  }
+
+  /** 鍵をかける / 外す。中分類と先取りの自動記録の名前も、別名 / 本当の名前に付け替える */
+  async setGoalPrivate(id: string, priv: boolean, alias?: string): Promise<Goal | undefined> {
+    const g = this.goals.find((x) => x.id === id && !x.deleted_at);
+    if (!g) return undefined;
+    const a = (alias ?? g.alias ?? '').trim() || '貯金';
+    const label = priv ? a : g.name;
+    await this.updateCategory(g.category_id, { name: label });
+    for (const r of this.goalRules(g)) {
+      await this.saveRule({ id: r.id, name: `${label}（先取り）`, amount: r.amount, type: r.type, category_id: r.category_id, payment_method_id: r.payment_method_id, day_of_month: r.day_of_month, needs_review: r.needs_review });
+    }
+    Object.assign(g, { is_private: priv, alias: a, updated_at: nowIso() });
+    await this.save('goals', g);
+    this.emit();
+    this.requestSync();
+    return g;
+  }
+
+  async deleteGoal(id: string): Promise<void> {
+    const g = this.goals.find((x) => x.id === id);
+    if (!g) return;
+    const now = nowIso();
+    Object.assign(g, { deleted_at: now, updated_at: now });
+    await this.save('goals', g);
+    this.emit();
+    this.requestSync();
+  }
+
+  /** 先取りの自動記録（目標の中分類に入るもの） */
+  goalRules(g: Goal): RecurringRule[] {
+    return this.activeRules.filter((r) => r.category_id === g.category_id);
+  }
+
+  /** 今月までに予定していて、まだ入金していない分 */
+  dueGoalExtras(today = new Date()): { goal: Goal; month: string; amount: number }[] {
+    const cur = monthKey(today);
+    return this.activeGoals.flatMap((goal) => (goal.extras ?? []).filter((x) => !x.done && x.month <= cur).map((x) => ({ goal, month: x.month, amount: x.amount })));
+  }
+
+  /** 予定の入金を「入金した」にする（目標の中分類に 1 件記録） */
+  async completeGoalExtra(goalId: string, month: string): Promise<Transaction | undefined> {
+    const g = this.goals.find((x) => x.id === goalId && !x.deleted_at);
+    const ex = g?.extras.find((x) => x.month === month && !x.done);
+    if (!g || !ex) return undefined;
+    // メモは中分類の名前（鍵付きなら別名）で。目標の名前を記録に残さない
+    const label = this.categories.find((c) => c.id === g.category_id)?.name ?? '貯金';
+    const t = await this.addTransaction({ amount: ex.amount, categoryId: g.category_id, paymentMethodId: null, memo: `${label}へ入金（${Number(month.slice(5))}月の予定分）` });
+    await this.updateGoal(g.id, { extras: g.extras.map((x) => (x === ex ? { ...x, done: true } : x)) });
+    return t;
+  }
+
+  // ---- 節約のチャレンジ ---------------------------------------------------------
+
+  get activeChallenges(): Challenge[] {
+    return this.challenges.filter((c) => !c.deleted_at && c.is_active).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+  }
+
+  async saveChallenge(input: { id?: string; name: string; kind: Challenge['kind']; category_ids: string[]; limit: number }): Promise<Challenge> {
+    const now = nowIso();
+    const existing = input.id ? this.challenges.find((c) => c.id === input.id) : undefined;
+    const c: Challenge = {
+      id: existing?.id ?? uuid(), name: input.name.trim(), kind: input.kind, category_ids: [...input.category_ids], limit: Math.max(0, Math.trunc(input.limit)),
+      is_active: true, sort_order: existing?.sort_order ?? this.challenges.length, created_at: existing?.created_at ?? now, updated_at: now, deleted_at: null,
+    };
+    if (existing) Object.assign(existing, c);
+    else this.challenges.push(c);
+    await this.save('challenges', c);
+    this.emit();
+    this.requestSync();
+    return c;
+  }
+
+  async deleteChallenge(id: string): Promise<void> {
+    const c = this.challenges.find((x) => x.id === id);
+    if (!c) return;
+    const now = nowIso();
+    Object.assign(c, { deleted_at: now, updated_at: now });
+    await this.save('challenges', c);
+    this.emit();
+    this.requestSync();
   }
 
   // ---- 改善アドバイス（F23）への反応 ------------------------------------------
@@ -570,7 +706,7 @@ export class AppStore {
 
   exportJson(): string {
     return JSON.stringify(
-      { exported_at: nowIso(), categories: this.categories, payment_methods: this.paymentMethods, transactions: this.transactions, settings: this.settings, recurring_rules: this.recurringRules, budgets: this.budgets, debts: this.debts },
+      { exported_at: nowIso(), categories: this.categories, payment_methods: this.paymentMethods, transactions: this.transactions, settings: this.settings, recurring_rules: this.recurringRules, budgets: this.budgets, debts: this.debts, goals: this.goals, challenges: this.challenges },
       null,
       2,
     );

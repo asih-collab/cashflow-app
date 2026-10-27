@@ -2,7 +2,8 @@
 // 外部の AI は使わない（04 の 5 章）。ルールのしきい値と文言は adviceRules.ts の 1 か所にまとめ、
 // 月 1 回の見直しではそのファイルだけを直す（04 の 6 章）。
 
-import type { Budget, Category, Debt, RecurringRule, Transaction } from './types';
+import type { Budget, Category, Debt, Goal, RecurringRule, Transaction } from './types';
+import { goalLabel, goalStatus } from './goal';
 import { postingDate, recurringTransactionId } from './recurring';
 import { inPeriod, parseDate, toDateString, type Period } from './period';
 import { RULES, LIMITS } from './adviceRules';
@@ -65,6 +66,8 @@ export interface AdviceContext {
   emptyDaysLast7: number;
   /** 始まって間もないか（見込みに予算・前月を混ぜている間） */
   warmingUp: boolean;
+  /** 貯金の目標: 今の見込みと、月末の黒字見込みを足したときの見込み */
+  goals: { name: string; reachMonth: string | null; reachWithSurplus: string | null }[];
   /** 記録を使い始めて何日か（最初の記録の日から） */
   daysSinceFirstRecord: number;
   debts: Debt[];
@@ -107,6 +110,7 @@ export function adviceContext(input: {
   debts: Debt[];
   /** 固定費・給料の自動記録。まだ記録されていない期間内の分を見込みに足す */
   rules?: RecurringRule[];
+  goals?: Goal[];
   period: Period;
   prev: Period;
   today: Date;
@@ -151,11 +155,20 @@ export function adviceContext(input: {
     warmingUp: elapsedDays < LIMITS.forecastWarmupDays,
     emptyDaysLast7,
     daysSinceFirstRecord: first ? dayDiff(first, today) : 0,
+    goals: (input.goals ?? []).filter((g) => !g.deleted_at && g.is_active).map((g) => {
+      const surplus = Math.max(0, Math.floor((cur.income - cur.fixed - variableForecast) / 1000) * 1000);
+      return {
+        name: goalLabel(g),
+        reachMonth: goalStatus(g, transactions, input.rules ?? [], input.today).reachMonth,
+        reachWithSurplus: surplus > 0 ? goalStatus(g, transactions, input.rules ?? [], input.today, surplus).reachMonth : null,
+      };
+    }),
     debts: input.debts.filter((d) => !d.deleted_at && d.is_active),
   };
 }
 
 /** ルールを全部当てて、優先度の高い順に返す。同じルールの重複は上位だけ（ルール側の maxPerRule まで） */
+
 export function buildAdvice(ctx: AdviceContext): Advice[] {
   const all: Advice[] = [];
   for (const rule of RULES) {

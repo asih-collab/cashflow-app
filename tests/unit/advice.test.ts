@@ -15,7 +15,7 @@ const tx = (date: string, amount: number, cat: string, extra: Partial<Transactio
   recurring_rule_id: null, created_at: 'x', updated_at: 'x', deleted_at: null, ...extra,
 });
 const budget = (parent: string, amount: number, period_start: string): Budget => ({ id: parent, period_start, category_id: id(parent), amount, created_at: 'x', updated_at: 'x', deleted_at: null });
-const debt = (p: Partial<Debt>): Debt => ({ id: 'd', name: '楽天', balance: 900000, balance_date: '2026-10-25', monthly_payment: 30000, annual_rate: 15, history: [], lumps: [], is_active: true, sort_order: 0, created_at: 'x', updated_at: 'x', deleted_at: null, ...p });
+const debt = (p: Partial<Debt>): Debt => ({ id: 'd', name: 'カードA', balance: 900000, balance_date: '2026-10-25', monthly_payment: 30000, annual_rate: 15, history: [], lumps: [], is_active: true, sort_order: 0, created_at: 'x', updated_at: 'x', deleted_at: null, ...p });
 
 // 給料日基準（25 日始まり）。今日 = 11/9（期間 10/25〜11/24 の 16 日目）
 const SD = 25;
@@ -131,17 +131,17 @@ describe('改善アドバイス（F23）: ルール', () => {
     const a = advise([salary, ...daily('2026-10-25', '2026-11-09', 1000, '食料品')], { debts: [debt({})] });
     const s = a.find((x) => x.rule === 'surplus_to_debt')!;
     expect(s.title).toContain('黒字見込み');
-    expect(s.body).toContain('楽天');
+    expect(s.body).toContain('カードA');
     // 年率の高いカードがあればそちらに回す。月の初めのうちは出さない
-    const two = advise([salary, ...daily('2026-10-25', '2026-11-09', 1000, '食料品')], { debts: [debt({}), debt({ id: 'd2', name: 'ダイナース', balance: 550000, annual_rate: 18 })] });
-    expect(two.find((x) => x.rule === 'surplus_to_debt')!.body).toContain('ダイナース');
+    const two = advise([salary, ...daily('2026-10-25', '2026-11-09', 1000, '食料品')], { debts: [debt({}), debt({ id: 'd2', name: 'カードB', balance: 550000, annual_rate: 18 })] });
+    expect(two.find((x) => x.rule === 'surplus_to_debt')!.body).toContain('カードB');
     expect(rules(advise([salary, tx('2026-10-26', 1000, '食料品')], { debts: [debt({})], today: new Date(2026, 9, 27) }))).not.toContain('surplus_to_debt');
     expect(s.body).toMatch(/手数料が約 ¥[\d,]+ 減ります/);
   });
   it('リボの手数料と、次の一括返済の効果', () => {
     const d = debt({ lumps: [{ month: '2026-12', amount: 300000, done: false }] });
     const r = advise([salary], { debts: [d] }).find((x) => x.rule === 'revo_fee')!;
-    expect(r.title).toBe('リボの手数料は今月約 ¥11,070');
+    expect(r.title).toBe('リボの手数料は今月約 ¥11,250');
     expect(r.body).toContain('2026年12月の一括返済（¥300,000）のあとは、月 ¥3,750 ほど減ります');
   });
   it('記録の抜け: 使い始めて 1 週間以上たち、直近 7 日で 3 日以上記録がない', () => {

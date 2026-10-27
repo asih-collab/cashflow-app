@@ -130,7 +130,48 @@ export interface AdviceFeedback {
   deleted_at: string | null;
 }
 
-export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'debts' | 'advice_feedback';
+/** 貯金の目標（旅行資金など）。入金は goal の中分類（category_id）の記録として数える */
+export interface Goal {
+  id: string;
+  name: string;
+  /** 目標額 */
+  target: number;
+  /** 入金を記録する中分類（貯蓄・投資の下に目標ごとに作る） */
+  category_id: string;
+  /** 当てにする資産（NISA の残高など。値動きがあるものは目安） */
+  assets: { name: string; amount: number }[];
+  /** ボーナスなどからの入金の予定。入金したら done */
+  extras: { month: string; amount: number; done: boolean }[];
+  /** ◯月から毎月の入金を増やす予定（リボ完済後など） */
+  increases: { from: string; amount: number }[];
+  /** 鍵付き: 端末の鍵を開くまで、名前・金額を見せない（ほかの画面では alias で表示） */
+  is_private?: boolean;
+  /** 鍵付きのときに、ほかの画面で使う名前（例: 貯金） */
+  alias?: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** 節約のチャレンジ（飲み会は月 2 回まで、ギャンブルは月 1 万円まで など）。予算期間ごとに数える */
+export interface Challenge {
+  id: string;
+  name: string;
+  kind: 'count' | 'amount';
+  /** 対象の中分類 */
+  category_ids: string[];
+  /** 上限（回数 or 円） */
+  limit: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export type SyncTable = 'categories' | 'payment_methods' | 'transactions' | 'settings' | 'recurring_rules' | 'budgets' | 'debts' | 'advice_feedback' | 'goals' | 'challenges';
 
 export interface Session {
   access_token: string;

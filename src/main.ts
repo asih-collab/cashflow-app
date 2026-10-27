@@ -19,6 +19,8 @@ import { renderBudget } from './ui/views/budget';
 import { renderRecurring } from './ui/views/recurring';
 import { renderDebts } from './ui/views/debts';
 import { renderReceipt } from './ui/views/receipt';
+import { renderGoals } from './ui/views/goals';
+import { lock, onPrivacyChange } from './lib/privacy';
 import { renderSummary } from './ui/views/summary';
 import { renderHistory } from './ui/views/history';
 import { isIOS, isStandalone } from './ui/install';
@@ -97,7 +99,7 @@ async function boot(): Promise<void> {
       tab('#/history', 'list', '履歴', path === '/history' || path === '/edit'),
       tab('#/add', 'add', '記録', path === '/add' || path === '/receipt', 'add'),
       tab('#/summary', 'chart', 'サマリ', path === '/summary' || path === '/budget'),
-      tab('#/settings', 'settings', '設定', ['/settings', '/categories', '/login', '/handoff', '/recurring', '/debts'].includes(path)),
+      tab('#/settings', 'settings', '設定', ['/settings', '/categories', '/login', '/handoff', '/recurring', '/debts', '/goals'].includes(path)),
     );
   }
 
@@ -119,6 +121,7 @@ async function boot(): Promise<void> {
       case '/recurring': el = renderRecurring(ctx, route); break;
       case '/debts': el = renderDebts(ctx, route); break;
       case '/receipt': el = renderReceipt(ctx, route); break;
+      case '/goals': el = renderGoals(ctx, route); break;
       case '/summary': el = renderSummary(ctx, route); break;
       case '/history': el = renderHistory(ctx, route); break;
       default: el = renderHome(ctx);
@@ -132,7 +135,7 @@ async function boot(): Promise<void> {
   window.addEventListener('hashchange', render);
   // データや同期状態が変わったら、入力中でない画面だけ描き直す
   const rerenderIfIdle = () => {
-    if (['/add', '/edit', '/login', '/handoff', '/budget', '/recurring', '/debts', '/receipt'].includes(ctx.route?.path ?? '')) return;
+    if (['/add', '/edit', '/login', '/handoff', '/budget', '/recurring', '/debts', '/receipt', '/goals'].includes(ctx.route?.path ?? '')) return;
     render();
   };
   store.subscribe(rerenderIfIdle);
@@ -152,8 +155,10 @@ async function boot(): Promise<void> {
   // 同期のきっかけ: 起動時、通信復帰、画面復帰、5 分ごと
   void syncer.sync();
   window.addEventListener('online', () => void syncer.sync());
+  // 鍵付きの目標: アプリを裏に回したら閉じる。開け閉めしたら描き直す
+  onPrivacyChange(() => { if (!ctx.busy.entering) render(); });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
+    if (document.visibilityState !== 'visible') { lock(); return; }
     // 日付が変わってから戻ってきたら、「今日」を描き直す（入力の途中なら邪魔しない）
     if (renderedDay !== new Date().toDateString() && !ctx.busy.entering) render();
     void store.applyRecurring(); // 月が変わっていたら、その月の固定費・給料を記録

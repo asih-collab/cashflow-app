@@ -83,6 +83,7 @@ export function renderSettings(ctx: AppContext): HTMLElement {
   // ---- カテゴリ・支払い手段 ----
   const lists = h('div', { class: 'card' });
   lists.appendChild(h('a', { class: 'list-item', href: '#/recurring', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-recurring' }, h('span', { class: 'grow' }, '固定費・定期の収入（毎月の自動記録）'), h('span', { class: 'muted' }, icon('chevron'))));
+  lists.appendChild(h('a', { class: 'list-item', href: '#/goals', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-goals' }, h('span', { class: 'grow' }, '貯金の目標・節約のチャレンジ'), h('span', { class: 'muted' }, icon('chevron'))));
   lists.appendChild(h('a', { class: 'list-item', href: '#/debts', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-debts' }, h('span', { class: 'grow' }, 'リボ・分割の残高（完済の見込み）'), h('span', { class: 'muted' }, icon('chevron'))));
   lists.appendChild(h('a', { class: 'list-item', href: '#/budget', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-budget-settings' }, h('span', { class: 'grow' }, '予算'), h('span', { class: 'muted' }, icon('chevron'))));
   lists.appendChild(h('a', { class: 'list-item', href: '#/categories', style: 'text-decoration:none;color:inherit', 'data-testid': 'go-categories' }, h('span', { class: 'grow' }, 'カテゴリ（追加・名前の変更・非表示）'), h('span', { class: 'muted' }, icon('chevron'))));

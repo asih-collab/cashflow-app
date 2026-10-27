@@ -13,7 +13,7 @@ export function currentAdvice(store: AppStore, today = new Date()): { advice: Ad
   const sd = store.settings.month_start_day;
   const period = periodFor(today, sd);
   const prev = shiftPeriod(period, 1, sd);
-  const ctx = adviceContext({ transactions: store.transactions, categories: store.categories, budgets: store.budgets, debts: store.debts, rules: store.recurringRules, period, prev, today });
+  const ctx = adviceContext({ transactions: store.transactions, categories: store.categories, budgets: store.budgets, debts: store.debts, rules: store.recurringRules, goals: store.activeGoals, period, prev, today });
   return { advice: buildAdvice(ctx), periodStart: period.start };
 }
 
@@ -29,7 +29,7 @@ export function renderAdviceList(store: AppStore, opts: { max?: number; testid: 
 /** 今日の気づき（その人の記録から、今日・昨日のこと）。なければ null */
 export function renderDailyAdviceList(store: AppStore, testid: string, today = new Date()): HTMLElement | null {
   const period = periodFor(today, store.settings.month_start_day);
-  const list = buildDailyAdvice(dailyContext({ transactions: store.transactions, categories: store.categories, budgets: store.budgets, period, today }));
+  const list = buildDailyAdvice(dailyContext({ transactions: store.transactions, categories: store.categories, budgets: store.budgets, period, today, challenges: store.activeChallenges }));
   return list.length > 0 ? renderItems(store, list, period.start, testid) : null;
 }
 

@@ -2,7 +2,8 @@
 // ルール・しきい値・文言は adviceRules.ts（DAILY_RULES / DAILY_LIMITS）。月 1 回の見直しでいっしょに直す。
 
 import type { Advice } from './advice';
-import type { Budget, Category, Transaction } from './types';
+import type { Budget, Category, Challenge, Transaction } from './types';
+import { challengeStatus, formatChallenge } from './challenge';
 import { parseDate, toDateString, type Period } from './period';
 import { DAILY_RULES, DAILY_LIMITS } from './adviceRules';
 
@@ -44,6 +45,8 @@ export interface DailyContext {
   /** 今日、給料（収入）が入った */
   paydayIncome: number;
   periodTotalDays: number;
+  /** 節約のチャレンジの今の状態 */
+  challenges: { name: string; text: string; ratio: number; reached: boolean; over: boolean; kind: 'count' | 'amount' }[];
 }
 
 const DAY = 86400000;
@@ -52,7 +55,7 @@ const addDays = (d: string, n: number) => {
   return toDateString(new Date(x.getFullYear(), x.getMonth(), x.getDate() + n));
 };
 
-export function dailyContext(input: { transactions: Transaction[]; categories: Category[]; budgets: Budget[]; period: Period; today: Date }): DailyContext {
+export function dailyContext(input: { transactions: Transaction[]; categories: Category[]; budgets: Budget[]; period: Period; today: Date; challenges?: Challenge[] }): DailyContext {
   const { transactions, categories, period } = input;
   const byId = new Map(categories.map((c) => [c.id, c]));
   const today = toDateString(input.today);
@@ -104,6 +107,10 @@ export function dailyContext(input: { transactions: Transaction[]; categories: C
     scheduledToday: scheduled(today), scheduledTomorrow: scheduled(addDays(today, 1)),
     paydayIncome,
     periodTotalDays: period.totalDays,
+    challenges: (input.challenges ?? []).filter((c) => c.is_active && !c.deleted_at).map((c) => {
+      const s = challengeStatus(c, transactions, period);
+      return { name: c.name, text: formatChallenge(s, c.kind), ratio: s.ratio, reached: s.reached, over: s.over, kind: c.kind };
+    }),
   };
 }
 
