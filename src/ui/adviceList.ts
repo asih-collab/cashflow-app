@@ -5,6 +5,7 @@ import { adviceContext, buildAdvice, type Advice } from '../lib/advice';
 import { LIMITS } from '../lib/adviceRules';
 import { periodFor, shiftPeriod } from '../lib/period';
 import type { AppStore } from '../lib/store';
+import { buildDailyAdvice, dailyContext } from '../lib/dailyAdvice';
 
 const LEVEL_LABEL: Record<Advice['level'], string> = { warn: '注意', info: '参考', good: '順調' };
 
@@ -22,7 +23,18 @@ export function renderAdviceList(store: AppStore, opts: { max?: number; testid: 
   if (shown.length === 0) {
     return opts.emptyText ? h('div', { class: 'card muted small', 'data-testid': opts.testid }, opts.emptyText) : null;
   }
-  const list = h('div', { class: 'advice-list', 'data-testid': opts.testid });
+  return renderItems(store, shown, periodStart, opts.testid);
+}
+
+/** 今日の気づき（その人の記録から、今日・昨日のこと）。なければ null */
+export function renderDailyAdviceList(store: AppStore, testid: string, today = new Date()): HTMLElement | null {
+  const period = periodFor(today, store.settings.month_start_day);
+  const list = buildDailyAdvice(dailyContext({ transactions: store.transactions, categories: store.categories, budgets: store.budgets, period, today }));
+  return list.length > 0 ? renderItems(store, list, period.start, testid) : null;
+}
+
+function renderItems(store: AppStore, shown: Advice[], periodStart: string, testid: string): HTMLElement {
+  const list = h('div', { class: 'advice-list', 'data-testid': testid });
   for (const a of shown) {
     const fb = store.feedbackFor(periodStart, a.key);
     const thanks = h('span', { class: 'muted small advice-thanks' }, fb ? (fb.useful ? '役に立った' : '役に立たなかった') : '');

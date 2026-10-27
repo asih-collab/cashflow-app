@@ -5,6 +5,7 @@
 // priority は大きいほど上に出る。warn（注意）> info（参考）> good（順調）の順に目安を分けている。
 
 import type { Advice, AdviceContext } from './advice';
+import type { DailyContext } from './dailyAdvice';
 import { debtOverview, monthLabel, pendingLumps, totalPlan } from './debt';
 import { yen } from './money';
 
@@ -225,3 +226,127 @@ function goodPace(c: AdviceContext): Advice[] {
 export const RULES: ((c: AdviceContext) => Advice[])[] = [
   deficitForecast, overBudget, budgetPace, categoryJump, unitPriceUp, frequency, surplusToDebt, revoFee, missingRecords, goodPace,
 ];
+
+// ---- 今日の気づき（日ごと） --------------------------------------------------------
+// その日・前の日の記録から。key に日付を入れる（反応は日ごとに 1 件）。
+
+export const DAILY_LIMITS = {
+  /** ホームに出す件数 */
+  count: 3,
+  /** 1 回あたりの平均を出すのに必要な記録の数 */
+  minRecordsForAverage: 10,
+  /** 大きめの出費: 平均の何倍以上、かつ何円以上 */
+  bigRatio: 3,
+  bigMin: 5000,
+  /** 同じ中分類を今日何回使ったら知らせるか */
+  repeatMin: 3,
+  /** 使いすぎやすい曜日: ほかの曜日の平均の何倍以上、かつ何円以上多い、同じ曜日が何日以上あるとき */
+  weekdayRatio: 1.5,
+  weekdayMin: 3000,
+  weekdaySamples: 3,
+} as const;
+
+const WD = ['日', '月', '火', '水', '木', '金', '土'];
+const sum = (xs: { amount: number }[]) => xs.reduce((a, x) => a + x.amount, 0);
+
+/** 今日の 1 日の目安と、今日使った額 */
+function dailyAllowance(c: DailyContext): Advice[] {
+  if (c.allowanceToday === null) return [];
+  const a = c.allowanceToday;
+  const key = `daily_allowance:${c.today}`;
+  if (c.todayTotal > a) {
+    const restDays = c.daysLeftInclToday - 1;
+    const left = c.budgetTotal - c.spentBeforeToday - c.todayTotal;
+    return [{
+      rule: 'daily_allowance', key, level: 'warn', priority: 95, href: '#/history?v=list',
+      title: `今日は 1 日の目安を ${yen(c.todayTotal - a)} 超えています`,
+      body: `今日 ${yen(c.todayTotal)}（目安 ${yen(a)}）。${restDays > 0 ? (left > 0 ? `残り ${restDays} 日を 1 日 ${yen(Math.floor(left / restDays))} にすると、今月の予算内に収まります。` : `今月の予算をすでに ${yen(-left)} 超えています。残り ${restDays} 日はできるだけ控えめに。`) : ''}`,
+    }];
+  }
+  return [{
+    rule: 'daily_allowance', key, level: c.todayTotal === 0 ? 'info' : 'good', priority: 60,
+    title: `今日使えるのは、あと ${yen(a - c.todayTotal)}`,
+    body: `今日の目安は ${yen(a)}（今月の予算の残り ÷ 残り ${c.daysLeftInclToday} 日）。${c.todayTotal > 0 ? `ここまで ${yen(c.todayTotal)} です。` : 'まだ使っていません。'}`,
+  }];
+}
+
+/** 昨日のふり返り */
+function yesterdayRecap(c: DailyContext): Advice[] {
+  if (c.yesterdayItems.length === 0) return [];
+  const top = [...c.yesterdayItems].sort((x, y) => y.amount - x.amount)[0]!;
+  const vs = c.allowanceYesterday === null ? '' : c.yesterdayTotal <= c.allowanceYesterday
+    ? `目安（${yen(c.allowanceYesterday)}）より ${yen(c.allowanceYesterday - c.yesterdayTotal)} 少なく済みました。`
+    : `目安（${yen(c.allowanceYesterday)}）より ${yen(c.yesterdayTotal - c.allowanceYesterday)} 多めでした。`;
+  return [{
+    rule: 'yesterday_recap', key: `yesterday_recap:${c.today}`,
+    level: c.allowanceYesterday !== null && c.yesterdayTotal <= c.allowanceYesterday ? 'good' : 'info', priority: 50,
+    title: `昨日は ${yen(c.yesterdayTotal)}（${c.yesterdayItems.length} 件）`,
+    body: `${c.yesterdayItems.length > 1 ? `いちばん大きいのは${top.sub}の ${yen(top.amount)}。` : `${top.sub}の ${yen(top.amount)}。`}${vs}`,
+  }];
+}
+
+/** 今日、同じ中分類を何度も */
+function repeatToday(c: DailyContext): Advice[] {
+  const by = new Map<string, number[]>();
+  for (const x of c.todayItems) by.set(x.sub, [...(by.get(x.sub) ?? []), x.amount]);
+  return [...by.entries()].filter(([, v]) => v.length >= DAILY_LIMITS.repeatMin).map(([sub, v]) => ({
+    rule: 'repeat_today', key: `repeat_today:${sub}:${c.today}`, level: 'info' as const, priority: 70,
+    title: `今日の${sub}は ${v.length} 回目（計 ${yen(v.reduce((a, b) => a + b, 0))}）`,
+    body: '1 回は少しでも、重なると大きくなります。次の 1 回は見送ってみませんか。',
+  }));
+}
+
+/** 今日の大きめの出費 */
+function bigPurchase(c: DailyContext): Advice[] {
+  if (c.avgPerRecord === null) return [];
+  const limit = Math.max(DAILY_LIMITS.bigMin, c.avgPerRecord * DAILY_LIMITS.bigRatio);
+  const big = c.todayItems.filter((x) => x.amount >= limit).sort((a, b) => b.amount - a.amount)[0];
+  if (!big) return [];
+  let body = `いつもの 1 回の平均は ${yen(c.avgPerRecord)} です。`;
+  if (c.allowanceToday !== null && c.daysLeftInclToday > 1) {
+    const before = Math.floor((c.budgetTotal - c.spentBeforeToday) / c.daysLeftInclToday);
+    const after = Math.max(0, Math.floor((c.budgetTotal - c.spentBeforeToday - c.todayTotal) / (c.daysLeftInclToday - 1)));
+    body += `今月の残りの 1 日あたりが ${yen(before)} → ${yen(after)} になりました。`;
+  }
+  return [{ rule: 'big_purchase', key: `big_purchase:${c.today}`, level: 'info', priority: 75, title: `今日の${big.sub} ${yen(big.amount)} は大きめの出費です`, body }];
+}
+
+/** 使いすぎやすい曜日 */
+function weekdayPeak(c: DailyContext): Advice[] {
+  if (c.weekdaySamples < DAILY_LIMITS.weekdaySamples || c.otherAvg <= 0) return [];
+  if (c.weekdayAvg < c.otherAvg * DAILY_LIMITS.weekdayRatio || c.weekdayAvg - c.otherAvg < DAILY_LIMITS.weekdayMin) return [];
+  const w = WD[c.weekday];
+  return [{
+    rule: 'weekday_peak', key: `weekday_peak:${c.today}`, level: 'info', priority: 55,
+    title: `${w}曜日は使いすぎやすい日です`,
+    body: `これまでの${w}曜日は 1 日平均 ${yen(c.weekdayAvg)}（ほかの曜日は ${yen(c.otherAvg)}）。今日は使う前に金額を決めておくと安心です。`,
+  }];
+}
+
+/** 今日・明日の固定費などの引き落とし（予定） */
+function upcomingFixed(c: DailyContext): Advice[] {
+  const out: Advice[] = [];
+  const one = (items: { name: string; amount: number }[], when: '今日' | '明日', priority: number) => {
+    if (items.length === 0) return;
+    out.push({
+      rule: 'upcoming_fixed', key: `upcoming_fixed:${when}:${c.today}`, level: 'info', priority, href: '#/recurring',
+      title: `${when}は ${items.map((x) => x.name).join('・')}（${yen(sum(items))}）の予定です`,
+      body: '固定費の自動記録に入っている予定です。口座やカードの残高を確かめておきましょう。',
+    });
+  };
+  one(c.scheduledToday, '今日', 66);
+  one(c.scheduledTomorrow, '明日', 64);
+  return out;
+}
+
+/** 給料日 */
+function payday(c: DailyContext): Advice[] {
+  if (c.paydayIncome <= 0 || c.allowanceToday === null) return [];
+  return [{
+    rule: 'payday', key: `payday:${c.today}`, level: 'good', priority: 90, href: '#/budget',
+    title: `今日は収入 ${yen(c.paydayIncome)} が入りました`,
+    body: `今月の変動費の予算は ${yen(c.budgetTotal)}、1 日あたり ${yen(Math.floor(c.budgetTotal / c.periodTotalDays))} です。最初の 1 週間で使いすぎないのがコツです。`,
+  }];
+}
+
+export const DAILY_RULES: ((c: DailyContext) => Advice[])[] = [dailyAllowance, yesterdayRecap, repeatToday, bigPurchase, weekdayPeak, upcomingFixed, payday];

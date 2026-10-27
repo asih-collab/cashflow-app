@@ -49,4 +49,18 @@ test.describe('改善アドバイス（F23）', () => {
     await page.goto('./#/summary');
     await expect(page.getByTestId('sum-advice')).toContainText('特に気になる点はありません');
   });
+
+  test('今日の気づき: 予算があればホームの上に「今日使えるのはあと◯円」が出て、使いすぎると注意に変わる', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-11-10T12:00:00+09:00') });
+    await openApp(page, '#/budget');
+    await page.getByTestId('budget-食費').fill('63000'); // 暦月 30 日、今日を含めて残り 21 日 → 1 日 3,000 円
+    await page.getByTestId('budget-食費').blur();
+    await page.goto('./#/');
+    const daily = page.getByTestId('home-daily');
+    await expect(daily.getByTestId('advice').first()).toContainText('今日使えるのは、あと ¥3,000');
+    await record(page, '5000', '外食');
+    await expect(page.getByTestId('home-daily').getByTestId('advice').first()).toContainText('目安を ¥2,000 超えています');
+    await expect(page.getByTestId('home-daily').getByTestId('advice').first()).toHaveAttribute('data-rule', 'daily_allowance');
+  });
 });
+

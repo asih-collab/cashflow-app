@@ -14,7 +14,7 @@ import { artworkElement } from '../art';
 import { icon } from '../icons';
 import { renderDebtCard } from '../debtCard';
 import { monthLabel } from '../../lib/debt';
-import { HOME_ADVICE_COUNT, renderAdviceList } from '../adviceList';
+import { HOME_ADVICE_COUNT, renderAdviceList, renderDailyAdviceList } from '../adviceList';
 
 const INSTALL_DISMISSED_KEY = 'cf.installHintDismissed';
 const WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -72,6 +72,13 @@ export function renderHome(ctx: AppContext): HTMLElement {
       h('a', { class: 'btn primary big', href: '#/add', 'data-testid': 'go-add', style: 'text-decoration:none' }, icon('add'), '記録する'),
     ),
   );
+
+  // 今日の気づき（その人の記録から、今日・昨日のこと）
+  const daily = renderDailyAdviceList(store, 'home-daily');
+  if (daily) {
+    root.appendChild(h('h2', null, '今日の気づき / Today'));
+    root.appendChild(daily);
+  }
 
   // 予算（大分類ごとの残り）
   if (bs.hasBudget) {
