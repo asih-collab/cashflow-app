@@ -6,6 +6,7 @@ import { hasPin, isUnlocked, lock, setPin, unlock, validPin } from '../../lib/pr
 import { monthLabel } from '../../lib/debt';
 import { challengeStatus, formatChallenge } from '../../lib/challenge';
 import { childrenOf, parentsOf } from '../../lib/categories';
+import { SAVINGS_PARENT_ID } from '../../lib/store';
 import { periodFor } from '../../lib/period';
 import type { AppContext, Route } from '../context';
 import type { Challenge, Goal } from '../../lib/types';
@@ -137,7 +138,7 @@ function renderGoalForm(ctx: AppContext, goal: Goal | null): HTMLElement {
   );
 
   // 当てにする資産・入金の予定・増やす予定（同じ形の一覧）
-  const listSection = <T extends Record<string, unknown>>(title: string, testid: string, items: T[], row: (x: T) => (string | Node)[], remove: (x: T) => Promise<Goal | undefined>, addFields: HTMLElement[], add: () => Promise<Goal | undefined>, note: string) => {
+  const listSection = <T,>(title: string, testid: string, items: T[], row: (x: T) => (string | Node)[], remove: (x: T) => Promise<Goal | undefined>, addFields: HTMLElement[], add: () => Promise<Goal | undefined>, note: string) => {
     root.append(h('h2', null, title), h('div', { class: 'card', 'data-testid': testid },
       h('p', { class: 'muted small', style: 'margin-top:0' }, note),
       items.map((x, i) => h('div', { class: 'list-item', 'data-testid': `${testid}-${i}` }, ...row(x),
@@ -147,18 +148,24 @@ function renderGoalForm(ctx: AppContext, goal: Goal | null): HTMLElement {
     ));
   };
 
-  const assetName = h('input', { class: 'input', type: 'text', placeholder: '例: NISA の残高', 'data-testid': 'asset-name' });
+  const assetName = h('input', { class: 'input', type: 'text', placeholder: '例: 積立 NISA', 'data-testid': 'asset-name' });
   const assetAmount = moneyInput('asset-amount');
+  // 積立に連動: 「貯蓄・投資」の中分類（この目標のもの以外）の記録の分だけ増えていく
+  const assetCat = h('select', { class: 'input', 'data-testid': 'asset-category' }, h('option', { value: '' }, '連動しない（金額は自分で直す）'));
+  const savingsParent = store.categories.find((c) => c.id === SAVINGS_PARENT_ID);
+  if (savingsParent) for (const c of childrenOf(store.categories, savingsParent.id).filter((x) => x.is_active && x.id !== goal.category_id)) assetCat.appendChild(h('option', { value: c.id }, `${c.name} の積立を足していく`));
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   listSection('当てにする資産 / Assets', 'goal-assets', goal.assets ?? [],
-    (a) => [h('span', { class: 'grow' }, a.name), h('span', { class: 'amount' }, yen(a.amount))],
+    (a) => [h('span', { class: 'grow' }, a.name, a.category_id ? h('div', { class: 'recent-meta' }, `${(a.as_of ?? '').replace(/-/g, '/')} 時点 + その後の積立（${store.categories.find((c) => c.id === a.category_id)?.name ?? ''}）`) : null), h('span', { class: 'amount' }, yen(a.amount))],
     (a) => store.updateGoal(goal.id, { assets: goal.assets.filter((x) => x !== a) }),
-    [h('label', { class: 'field' }, h('span', null, '名前'), assetName), h('label', { class: 'field' }, h('span', null, '金額（円）'), assetAmount)],
+    [h('label', { class: 'field' }, h('span', null, '名前'), assetName), h('label', { class: 'field' }, h('span', null, '今の残高（円）'), assetAmount), h('label', { class: 'field' }, h('span', null, '毎月の積立'), assetCat)],
     async () => {
-      if (!assetName.value.trim() || num(assetAmount.value) <= 0) { toast('名前と金額を入れてください'); return undefined; }
+      if (!assetName.value.trim() || (num(assetAmount.value) <= 0 && !assetCat.value)) { toast('名前と金額を入れてください'); return undefined; }
       const rest = (goal.assets ?? []).filter((x) => x.name !== assetName.value.trim());
-      return store.updateGoal(goal.id, { assets: [...rest, { name: assetName.value.trim(), amount: num(assetAmount.value) }] });
+      return store.updateGoal(goal.id, { assets: [...rest, { name: assetName.value.trim(), amount: num(assetAmount.value), ...(assetCat.value ? { category_id: assetCat.value, as_of: todayStr } : {}) }] });
     },
-    'NISA や預金など、この目標に使うつもりのお金。貯まった額に含めます（値動きのあるものは、ときどき金額を直してください。同じ名前で追加すると上書き）。');
+    'NISA や預金など、この目標に使うつもりのお金。貯まった額に含めます。「毎月の積立」を選ぶと、その積立の記録の分だけ自動で増えていきます（値動きのあるものは、ときどき残高を直してください。同じ名前で追加すると上書き）。');
 
   const exMonth = h('input', { class: 'input', type: 'month', value: `${new Date().getFullYear()}-12`, 'data-testid': 'extra-month' });
   const exAmount = moneyInput('extra-amount');

@@ -40,9 +40,15 @@ function ruleActive(r: RecurringRule, month: string): boolean {
   return r.is_active && !r.deleted_at && r.type === 'expense' && month >= r.start_month && (!r.end_month || month <= r.end_month);
 }
 
-/** その月の毎月の入金（先取りの自動記録 + 増やす予定） */
+/** 目標に数える中分類（目標の中分類 + 積立に連動する資産の中分類） */
+function goalCategories(goal: Goal): Set<string> {
+  return new Set([goal.category_id, ...(goal.assets ?? []).map((a) => a.category_id).filter((x): x is string => !!x)]);
+}
+
+/** その月の毎月の入金（先取り・連動する積立の自動記録 + 増やす予定） */
 export function monthlyFor(goal: Goal, rules: RecurringRule[], month: string): number {
-  const fromRules = rules.filter((r) => r.category_id === goal.category_id && ruleActive(r, month)).reduce((a, r) => a + r.amount, 0);
+  const cats = goalCategories(goal);
+  const fromRules = rules.filter((r) => r.category_id && cats.has(r.category_id) && ruleActive(r, month)).reduce((a, r) => a + r.amount, 0);
   const inc = (goal.increases ?? []).filter((x) => x.from <= month).reduce((a, x) => a + x.amount, 0);
   return fromRules + inc;
 }
@@ -51,13 +57,19 @@ export function goalStatus(goal: Goal, transactions: Transaction[], rules: Recur
   const todayStr = `${monthKey(today)}-${String(today.getDate()).padStart(2, '0')}`;
   const mine = transactions.filter((t) => !t.deleted_at && t.type === 'expense' && t.category_id === goal.category_id);
   const saved = mine.filter((t) => t.date <= todayStr).reduce((a, t) => a + t.amount, 0);
-  const assets = (goal.assets ?? []).reduce((a, x) => a + Math.max(0, x.amount), 0);
+  // 資産: 確認した日の残高 + その後の積立の記録（今日まで）
+  const linked = (goal.assets ?? []).filter((x) => x.category_id).map((x) => ({
+    x, tx: transactions.filter((t) => !t.deleted_at && t.type === 'expense' && t.category_id === x.category_id && t.date > (x.as_of ?? '')),
+  }));
+  const assets = (goal.assets ?? []).reduce((a, x) => a + Math.max(0, x.amount), 0)
+    + linked.reduce((a, l) => a + l.tx.filter((t) => t.date <= todayStr).reduce((b, t) => b + t.amount, 0), 0);
   const total = saved + assets;
+  const linkedFuture = linked.reduce((a, l) => a + l.tx.filter((t) => t.date > todayStr).reduce((b, t) => b + t.amount, 0), 0);
   const cur = monthKey(today);
   const pending = (goal.extras ?? []).filter((x) => !x.done && x.amount > 0).sort((a, b) => a.month.localeCompare(b.month));
 
   // 見込み: 今月の残り（まだ来ていない予定日付の記録と、今月の済んでいない予定）→ 来月以降は毎月の入金と予定
-  let acc = total + extraNow + mine.filter((t) => t.date > todayStr).reduce((a, t) => a + t.amount, 0);
+  let acc = total + extraNow + linkedFuture + mine.filter((t) => t.date > todayStr).reduce((a, t) => a + t.amount, 0);
   acc += pending.filter((x) => x.month <= cur).reduce((a, x) => a + x.amount, 0);
   // 今月の先取りは、自動記録が月初に予定日付で記録済み（上の「まだ来ていない記録」に入っている）
   let reachMonth: string | null = acc >= goal.target ? cur : null;

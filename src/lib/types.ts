@@ -130,6 +130,19 @@ export interface AdviceFeedback {
   deleted_at: string | null;
 }
 
+/**
+ * 当てにする資産（預金・NISA の残高など）。category_id を付けると、その中分類の記録（as_of より後）と
+ * 毎月の自動記録の分だけ増えていく（例: 積立 NISA を続けながら、必要な時に引き出す）
+ */
+export interface GoalAsset {
+  name: string;
+  /** as_of の日の残高 */
+  amount: number;
+  category_id?: string;
+  /** 残高を確認した日（YYYY-MM-DD） */
+  as_of?: string;
+}
+
 /** 貯金の目標（旅行資金など）。入金は goal の中分類（category_id）の記録として数える */
 export interface Goal {
   id: string;
@@ -139,7 +152,7 @@ export interface Goal {
   /** 入金を記録する中分類（貯蓄・投資の下に目標ごとに作る） */
   category_id: string;
   /** 当てにする資産（NISA の残高など。値動きがあるものは目安） */
-  assets: { name: string; amount: number }[];
+  assets: GoalAsset[];
   /** ボーナスなどからの入金の予定。入金したら done */
   extras: { month: string; amount: number; done: boolean }[];
   /** ◯月から毎月の入金を増やす予定（リボ完済後など） */

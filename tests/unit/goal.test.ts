@@ -43,6 +43,16 @@ describe('貯金の目標', () => {
     expect(s.total).toBe(300_000);
     expect(s.reachMonth).toBe('2027-08');
   });
+  it('積立に連動する資産: 確認した日の残高 + その後の積立の記録（今日まで）。見込みには毎月の積立の自動記録も入る', () => {
+    const INVEST = id('積立投資');
+    const asset = { name: '積立', amount: 100_000, category_id: INVEST, as_of: '2026-10-20' };
+    const t = [tx('2026-10-16', 40_000, INVEST), tx('2026-10-25', 30_000, INVEST), tx('2026-10-30', 30_000, INVEST, { source: 'recurring' })];
+    const s = goalStatus(goal({ target: 400_000, assets: [asset] }), t, [rule(20_000), rule(30_000, '2026-11', INVEST)], TODAY);
+    expect(s.assets).toBe(130_000); // 10/16 は確認した日より前なので数えない、10/30 はまだ先
+    expect(s.monthlyNow).toBe(0);
+    // 10 月末で 160,000 → 11 月から毎月 50,000（先取り 2 万 + 積立 3 万）→ 2027 年 3 月に 410,000
+    expect(s.reachMonth).toBe('2027-03');
+  });
   it('入金した分（目標の中分類の記録）は貯まった額に入る。先の日付の記録は見込みにだけ入る', () => {
     const t = [tx('2026-10-20', 100_000, GOAL_CAT), tx('2026-10-30', 50_000, GOAL_CAT, { source: 'recurring' })];
     const s = goalStatus(goal({ target: 150_000 }), t, [], TODAY);
