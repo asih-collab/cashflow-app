@@ -28,6 +28,14 @@ describe('今日の気づき: 状況の計算', () => {
     expect(c.allowanceToday).toBe(Math.floor((230000 - 7000) / 23));
     expect(c.todayTotal).toBe(500);
   });
+  it('先の日付で記録した変動費（予定）も目安から先に引く。今日何も使っていなければホームの 1 日あたりと同じ', () => {
+    const t = [tx('2026-10-26', 18_000, '外食'), tx('2026-11-10', 50_000, 'デート'), tx('2026-11-30', 9_999, '外食')];
+    const c = dailyContext({ transactions: t, categories: cats, budgets: [budget(230000)], period, today: TODAY });
+    expect(c.scheduledSpend).toBe(50_000); // 11/30 は期間の外
+    expect(c.allowanceToday).toBe(Math.floor((230000 - 18_000 - 50_000) / 23));
+    const r = run(t, [budget(230000)]).find((x) => x.rule === 'daily_allowance')!;
+    expect(r.body).toContain('先の日付で記録した ¥50,000 は先に引いています');
+  });
   it('固定費は変動費に数えない', () => {
     const c = dailyContext({ transactions: [tx('2026-11-02', 130000, '家賃')], categories: cats, budgets: [budget(100000)], period, today: TODAY });
     expect(c.todayTotal).toBe(0);

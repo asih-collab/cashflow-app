@@ -277,7 +277,7 @@ function dailyAllowance(c: DailyContext): Advice[] {
   const key = `daily_allowance:${c.today}`;
   if (c.todayTotal > a) {
     const restDays = c.daysLeftInclToday - 1;
-    const left = c.budgetTotal - c.spentBeforeToday - c.todayTotal;
+    const left = c.budgetTotal - c.spentBeforeToday - c.scheduledSpend - c.todayTotal;
     return [{
       rule: 'daily_allowance', key, level: 'warn', priority: 95, href: '#/history?v=list',
       title: `今日は 1 日の目安を ${yen(c.todayTotal - a)} 超えています`,
@@ -287,7 +287,7 @@ function dailyAllowance(c: DailyContext): Advice[] {
   return [{
     rule: 'daily_allowance', key, level: c.todayTotal === 0 ? 'info' : 'good', priority: 60,
     title: `今日使えるのは、あと ${yen(a - c.todayTotal)}`,
-    body: `今日の目安は ${yen(a)}（今月の予算の残り ÷ 残り ${c.daysLeftInclToday} 日）。${c.todayTotal > 0 ? `ここまで ${yen(c.todayTotal)} です。` : 'まだ使っていません。'}`,
+    body: `今日の目安は ${yen(a)}（今月の予算の残り ÷ 残り ${c.daysLeftInclToday} 日${c.scheduledSpend > 0 ? `。先の日付で記録した ${yen(c.scheduledSpend)} は先に引いています` : ''}）。${c.todayTotal > 0 ? `ここまで ${yen(c.todayTotal)} です。` : 'まだ使っていません。'}`,
   }];
 }
 
@@ -325,8 +325,8 @@ function bigPurchase(c: DailyContext): Advice[] {
   if (!big) return [];
   let body = `いつもの 1 回の平均は ${yen(c.avgPerRecord)} です。`;
   if (c.allowanceToday !== null && c.daysLeftInclToday > 1) {
-    const before = Math.floor((c.budgetTotal - c.spentBeforeToday) / c.daysLeftInclToday);
-    const after = Math.max(0, Math.floor((c.budgetTotal - c.spentBeforeToday - c.todayTotal) / (c.daysLeftInclToday - 1)));
+    const before = Math.floor((c.budgetTotal - c.spentBeforeToday - c.scheduledSpend) / c.daysLeftInclToday);
+    const after = Math.max(0, Math.floor((c.budgetTotal - c.spentBeforeToday - c.scheduledSpend - c.todayTotal) / (c.daysLeftInclToday - 1)));
     body += `今月の残りの 1 日あたりが ${yen(before)} → ${yen(after)} になりました。`;
   }
   return [{ rule: 'big_purchase', key: `big_purchase:${c.today}`, level: 'info', priority: 75, title: `今日の${big.sub} ${yen(big.amount)} は大きめの出費です`, body }];

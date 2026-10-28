@@ -22,6 +22,8 @@ export interface DailyContext {
   budgetTotal: number;
   /** 昨日までの今月の変動費 */
   spentBeforeToday: number;
+  /** 今日より先の日付で記録した今月の変動費（予定。目安からは先に引く） */
+  scheduledSpend: number;
   /** 今日の 1 日の目安（予算の残り ÷ 今日を含む残り日数）。予算がなければ null */
   allowanceToday: number | null;
   /** 今日の変動費 */
@@ -67,10 +69,12 @@ export function dailyContext(input: { transactions: Transaction[]; categories: C
 
   const budgetTotal = input.budgets.filter((b) => b.period_start === period.start && !b.deleted_at).reduce((a, b) => a + b.amount, 0);
   const spentBeforeToday = variable.filter((t) => t.date >= period.start && t.date < today).reduce((a, t) => a + t.amount, 0);
+  // 先の日付で記録した支出（予定）も、使うと決まっているお金として先に引く（ホームの「あと使える」と同じ考え方）
+  const scheduledSpend = variable.filter((t) => t.date > today && t.date <= period.end).reduce((a, t) => a + t.amount, 0);
   const daysLeftInclToday = Math.max(1, Math.round((parseDate(period.end).getTime() - parseDate(today).getTime()) / DAY) + 1);
-  const allowanceToday = budgetTotal > 0 ? Math.max(0, Math.floor((budgetTotal - spentBeforeToday) / daysLeftInclToday)) : null;
+  const allowanceToday = budgetTotal > 0 ? Math.max(0, Math.floor((budgetTotal - spentBeforeToday - scheduledSpend) / daysLeftInclToday)) : null;
   const spentBeforeYesterday = variable.filter((t) => t.date >= period.start && t.date < yesterday).reduce((a, t) => a + t.amount, 0);
-  const allowanceYesterday = budgetTotal > 0 && yesterday >= period.start ? Math.max(0, Math.floor((budgetTotal - spentBeforeYesterday) / (daysLeftInclToday + 1))) : null;
+  const allowanceYesterday = budgetTotal > 0 && yesterday >= period.start ? Math.max(0, Math.floor((budgetTotal - spentBeforeYesterday - scheduledSpend) / (daysLeftInclToday + 1))) : null;
 
   const todayItems = variable.filter((t) => t.date === today).map((t) => ({ sub: subName(t), amount: t.amount }));
   const yesterdayItems = variable.filter((t) => t.date === yesterday).map((t) => ({ sub: subName(t), amount: t.amount }));
@@ -99,7 +103,7 @@ export function dailyContext(input: { transactions: Transaction[]; categories: C
   const paydayIncome = live.filter((t) => t.date === today && t.type === 'income').reduce((a, t) => a + t.amount, 0);
 
   return {
-    today, weekday, daysLeftInclToday, budgetTotal, spentBeforeToday, allowanceToday,
+    today, weekday, daysLeftInclToday, budgetTotal, spentBeforeToday, scheduledSpend, allowanceToday,
     todayItems, todayTotal: todayItems.reduce((a, x) => a + x.amount, 0),
     yesterday, yesterdayItems, yesterdayTotal: yesterdayItems.reduce((a, x) => a + x.amount, 0), allowanceYesterday,
     avgPerRecord,
