@@ -41,6 +41,20 @@ export interface DailyContext {
   weekdayAvg: number;
   otherAvg: number;
   weekdaySamples: number;
+  /** 明日の曜日と、その曜日の 1 日平均・日数 */
+  tomorrowWeekday: number;
+  tomorrowAvg: number;
+  tomorrowOtherAvg: number;
+  tomorrowSamples: number;
+  /** 記録を始めてから昨日までの 1 日平均（記録のない日も 0 円の日として数える。過去 60 日まで）と日数 */
+  avgDaily: number;
+  recordedDays: number;
+  /** 昨日は変動費 0 円だった（記録を始めた後で、今月の期間の中） */
+  yesterdayZero: boolean;
+  /** 今月の期間の中で、昨日までの変動費 0 円の日数 */
+  zeroDaysThisPeriod: number;
+  /** 過去 30 日（今日を除く）の中分類ごとの回数・合計 */
+  habits: { sub: string; count: number; total: number }[];
   /** 今日・明日の固定費などの予定（自動記録で入っている先の日付の記録） */
   scheduledToday: DayItem[];
   scheduledTomorrow: DayItem[];
@@ -88,13 +102,35 @@ export function dailyContext(input: { transactions: Transaction[]; categories: C
   const firstDate = live.filter((t) => t.source !== 'recurring').map((t) => t.date).sort()[0];
   const byDay = new Map<string, number>();
   for (const t of variable) if (t.date < today) byDay.set(t.date, (byDay.get(t.date) ?? 0) + t.amount);
-  let wSum = 0, wN = 0, oSum = 0, oN = 0;
+  const wdSum = Array(7).fill(0) as number[], wdN = Array(7).fill(0) as number[];
   const weekday = parseDate(today).getDay();
+  const tomorrowWeekday = (weekday + 1) % 7;
+  let zeroDaysThisPeriod = 0;
   if (firstDate) {
     for (let d = firstDate < from ? from : firstDate; d < today; d = addDays(d, 1)) {
       const v = byDay.get(d) ?? 0;
-      if (parseDate(d).getDay() === weekday) { wSum += v; wN++; } else { oSum += v; oN++; }
+      const w = parseDate(d).getDay();
+      wdSum[w] = wdSum[w]! + v; wdN[w] = wdN[w]! + 1;
+      if (v === 0 && d >= period.start) zeroDaysThisPeriod++;
     }
+  }
+  const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const avgOf = (w: number) => (wdN[w]! > 0 ? Math.round(wdSum[w]! / wdN[w]!) : 0);
+  const avgExcept = (w: number) => {
+    const n = total(wdN) - wdN[w]!;
+    return n > 0 ? Math.round((total(wdSum) - wdSum[w]!) / n) : 0;
+  };
+  const recordedDays = total(wdN);
+  const yesterdayZero = !!firstDate && firstDate <= yesterday && yesterday >= period.start && !byDay.get(yesterday);
+
+  const from30 = addDays(today, -30);
+  const habitMap = new Map<string, { sub: string; count: number; total: number }>();
+  for (const t of variable) {
+    if (t.date < from30 || t.date >= today) continue;
+    const sub = subName(t);
+    const h = habitMap.get(sub) ?? { sub, count: 0, total: 0 };
+    h.count++; h.total += t.amount;
+    habitMap.set(sub, h);
   }
 
   const scheduled = (date: string) => live
@@ -107,7 +143,11 @@ export function dailyContext(input: { transactions: Transaction[]; categories: C
     todayItems, todayTotal: todayItems.reduce((a, x) => a + x.amount, 0),
     yesterday, yesterdayItems, yesterdayTotal: yesterdayItems.reduce((a, x) => a + x.amount, 0), allowanceYesterday,
     avgPerRecord,
-    weekdayAvg: wN > 0 ? Math.round(wSum / wN) : 0, otherAvg: oN > 0 ? Math.round(oSum / oN) : 0, weekdaySamples: wN,
+    weekdayAvg: avgOf(weekday), otherAvg: avgExcept(weekday), weekdaySamples: wdN[weekday]!,
+    tomorrowWeekday, tomorrowAvg: avgOf(tomorrowWeekday), tomorrowOtherAvg: avgExcept(tomorrowWeekday), tomorrowSamples: wdN[tomorrowWeekday]!,
+    avgDaily: recordedDays > 0 ? Math.round(total(wdSum) / recordedDays) : 0, recordedDays,
+    yesterdayZero, zeroDaysThisPeriod,
+    habits: [...habitMap.values()],
     scheduledToday: scheduled(today), scheduledTomorrow: scheduled(addDays(today, 1)),
     paydayIncome,
     periodTotalDays: period.totalDays,

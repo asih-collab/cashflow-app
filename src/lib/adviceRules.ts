@@ -265,29 +265,65 @@ export const DAILY_LIMITS = {
   weekdaySamples: 3,
   /** チャレンジ: 上限の何割から知らせるか */
   challengeNear: 0.8,
+  /** 習慣になっている出費: 過去 30 日で何回以上、1 回平均いくら以下（大きな買い物は対象外） */
+  habitMin: 6,
+  habitMaxAvg: 3000,
+  /** 使わない日: 記録を始めて何日以上たってから褒めるか */
+  noSpendMinDays: 7,
 } as const;
 
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
 const sum = (xs: { amount: number }[]) => xs.reduce((a, x) => a + x.amount, 0);
 
-/** 今日の 1 日の目安と、今日使った額 */
+/** 今日の 1 日の目安を超えたとき（目安そのものはホームの「1 日あたり」に出ているので、超えたときだけ） */
 function dailyAllowance(c: DailyContext): Advice[] {
   if (c.allowanceToday === null) return [];
   const a = c.allowanceToday;
-  const key = `daily_allowance:${c.today}`;
-  if (c.todayTotal > a) {
-    const restDays = c.daysLeftInclToday - 1;
-    const left = c.budgetTotal - c.spentBeforeToday - c.scheduledSpend - c.todayTotal;
-    return [{
-      rule: 'daily_allowance', key, level: 'warn', priority: 95, href: '#/history?v=list',
-      title: `今日は 1 日の目安を ${yen(c.todayTotal - a)} 超えています`,
-      body: `今日 ${yen(c.todayTotal)}（目安 ${yen(a)}）。${restDays > 0 ? (left > 0 ? `残り ${restDays} 日を 1 日 ${yen(Math.floor(left / restDays))} にすると、今月の予算内に収まります。` : `今月の予算をすでに ${yen(-left)} 超えています。残り ${restDays} 日はできるだけ控えめに。`) : ''}`,
-    }];
-  }
+  if (c.todayTotal <= a) return [];
+  const restDays = c.daysLeftInclToday - 1;
+  const left = c.budgetTotal - c.spentBeforeToday - c.scheduledSpend - c.todayTotal;
   return [{
-    rule: 'daily_allowance', key, level: c.todayTotal === 0 ? 'info' : 'good', priority: 60,
-    title: `今日使えるのは、あと ${yen(a - c.todayTotal)}`,
-    body: `今日の目安は ${yen(a)}（今月の予算の残り ÷ 残り ${c.daysLeftInclToday} 日${c.scheduledSpend > 0 ? `。先の日付で記録した ${yen(c.scheduledSpend)} は先に引いています` : ''}）。${c.todayTotal > 0 ? `ここまで ${yen(c.todayTotal)} です。` : 'まだ使っていません。'}`,
+    rule: 'daily_allowance', key: `daily_allowance:${c.today}`, level: 'warn', priority: 95, href: '#/history?v=list',
+    title: `今日は 1 日の目安を ${yen(c.todayTotal - a)} 超えています`,
+    body: `今日 ${yen(c.todayTotal)}（目安 ${yen(a)}）。${restDays > 0 ? (left > 0 ? `残り ${restDays} 日を 1 日 ${yen(Math.floor(left / restDays))} にすると、今月の予算内に収まります。` : `今月の予算をすでに ${yen(-left)} 超えています。残り ${restDays} 日はできるだけ控えめに。`) : ''}`,
+  }];
+}
+
+/** 習慣になっている小さな出費を、今日また使ったとき: 1 年に直すといくらか、週 1 回減らすといくら浮くか */
+function habitToday(c: DailyContext): Advice[] {
+  const todaySubs = new Set(c.todayItems.map((x) => x.sub));
+  const h = c.habits
+    .filter((x) => todaySubs.has(x.sub) && x.count >= DAILY_LIMITS.habitMin && x.total / x.count <= DAILY_LIMITS.habitMaxAvg)
+    .sort((x, y) => y.total - x.total)[0];
+  if (!h) return [];
+  const avg = Math.round(h.total / h.count);
+  const perYear = Math.round((h.total / 30) * 365 / 1000) * 1000;
+  return [{
+    rule: 'habit_today', key: `habit_today:${h.sub}:${c.today}`, level: 'info', priority: 72, href: '#/history?v=list',
+    title: `${h.sub}はこの 30 日で ${h.count} 回・${yen(h.total)}`,
+    body: `このペースだと 1 年で約 ${yen(perYear)}。1 回平均 ${yen(avg)} なので、週に 1 回減らすだけで年 ${yen(avg * 52)} 浮きます。`,
+  }];
+}
+
+/** 昨日は使わない日だった: 褒めて、続けたときの効果を出す */
+function noSpendDay(c: DailyContext): Advice[] {
+  if (!c.yesterdayZero || c.recordedDays < DAILY_LIMITS.noSpendMinDays || c.avgDaily <= 0) return [];
+  return [{
+    rule: 'no_spend_day', key: `no_spend_day:${c.today}`, level: 'good', priority: 58,
+    title: '昨日は使わない日でした',
+    body: `今月 ${c.zeroDaysThisPeriod} 日目です。いつもの 1 日平均（${yen(c.avgDaily)}）を使わずに済んだ計算。週にもう 1 日増やせると、月 ${yen(c.avgDaily * 4)} ほど浮きます。`,
+  }];
+}
+
+/** 明日は使いすぎやすい曜日: 前の日のうちに上限を決めてもらう */
+function tomorrowPeak(c: DailyContext): Advice[] {
+  if (c.tomorrowSamples < DAILY_LIMITS.weekdaySamples || c.tomorrowOtherAvg <= 0) return [];
+  if (c.tomorrowAvg < c.tomorrowOtherAvg * DAILY_LIMITS.weekdayRatio || c.tomorrowAvg - c.tomorrowOtherAvg < DAILY_LIMITS.weekdayMin) return [];
+  const w = WD[c.tomorrowWeekday];
+  return [{
+    rule: 'tomorrow_peak', key: `tomorrow_peak:${c.today}`, level: 'info', priority: 54,
+    title: `明日（${w}曜日）は使いすぎやすい日です`,
+    body: `これまでの${w}曜日は 1 日平均 ${yen(c.tomorrowAvg)}（ほかの曜日は ${yen(c.tomorrowOtherAvg)}）。今日のうちに明日使う上限を決めておくと、使いすぎを防げます。`,
   }];
 }
 
@@ -380,4 +416,6 @@ function challengeAlert(c: DailyContext): Advice[] {
   }));
 }
 
-export const DAILY_RULES: ((c: DailyContext) => Advice[])[] = [dailyAllowance, yesterdayRecap, repeatToday, bigPurchase, weekdayPeak, upcomingFixed, payday, challengeAlert];
+export const DAILY_RULES: ((c: DailyContext) => Advice[])[] = [
+  dailyAllowance, habitToday, noSpendDay, tomorrowPeak, yesterdayRecap, repeatToday, bigPurchase, weekdayPeak, upcomingFixed, payday, challengeAlert,
+];

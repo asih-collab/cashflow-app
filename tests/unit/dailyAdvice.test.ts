@@ -33,8 +33,6 @@ describe('今日の気づき: 状況の計算', () => {
     const c = dailyContext({ transactions: t, categories: cats, budgets: [budget(230000)], period, today: TODAY });
     expect(c.scheduledSpend).toBe(50_000); // 11/30 は期間の外
     expect(c.allowanceToday).toBe(Math.floor((230000 - 18_000 - 50_000) / 23));
-    const r = run(t, [budget(230000)]).find((x) => x.rule === 'daily_allowance')!;
-    expect(r.body).toContain('先の日付で記録した ¥50,000 は先に引いています');
   });
   it('固定費は変動費に数えない', () => {
     const c = dailyContext({ transactions: [tx('2026-11-02', 130000, '家賃')], categories: cats, budgets: [budget(100000)], period, today: TODAY });
@@ -43,12 +41,37 @@ describe('今日の気づき: 状況の計算', () => {
 });
 
 describe('今日の気づき: ルール', () => {
-  it('今日使える額（まだ使っていない / 使った）', () => {
-    const a = run([], [budget(230000)]);
-    expect(rule(a, 'daily_allowance')!.title).toBe(`今日使えるのは、あと ¥${Math.floor(230000 / 23).toLocaleString('en')}`);
-    const b = run([tx('2026-11-02', 3000, '外食')], [budget(230000)]);
-    expect(rule(b, 'daily_allowance')!.body).toContain('ここまで ¥3,000');
-    expect(rule(b, 'daily_allowance')!.level).toBe('good');
+  it('目安の内なら「今日使える額」は出さない（ホームの 1 日あたりと同じなので）', () => {
+    expect(rule(run([], [budget(230000)]), 'daily_allowance')).toBeUndefined();
+    expect(rule(run([tx('2026-11-02', 3000, '外食')], [budget(230000)]), 'daily_allowance')).toBeUndefined();
+  });
+  it('習慣の出費: 30 日で 6 回以上の小さな出費を今日また使ったら、1 年でいくら・週 1 回減らすといくら', () => {
+    const past = [3, 6, 9, 12, 15, 18].map((d) => tx(`2026-10-${d + 10}`, 600, 'カフェ'));
+    const r = rule(run([...past, tx('2026-11-02', 600, 'カフェ')]), 'habit_today')!;
+    expect(r.title).toBe('カフェはこの 30 日で 6 回・¥3,600');
+    expect(r.body).toContain('1 年で約 ¥44,000');
+    expect(r.body).toContain('年 ¥31,200 浮きます');
+    expect(rule(run(past), 'habit_today')).toBeUndefined(); // 今日使っていなければ出さない
+    const bigOnes = [3, 6, 9, 12, 15, 18].map((d) => tx(`2026-10-${d + 10}`, 8000, '外食'));
+    expect(rule(run([...bigOnes, tx('2026-11-02', 8000, '外食')]), 'habit_today')).toBeUndefined(); // 1 回が大きいものは対象外
+  });
+  it('使わない日: 昨日 0 円なら褒めて、今月何日目か・続けたときの効果を出す', () => {
+    const t = ['2026-10-20', '2026-10-25', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31'].map((d) => tx(d, 1300, '外食'));
+    const r = rule(run(t), 'no_spend_day')!;
+    // 10/20〜11/1 の 13 日で 9,100 円 → 1 日平均 700 円。今月（10/25〜）の 0 円の日は 10/26 と 11/1
+    expect(r.title).toBe('昨日は使わない日でした');
+    expect(r.body).toContain('今月 2 日目');
+    expect(r.body).toContain('¥700');
+    expect(rule(run([...t, tx('2026-11-01', 500, 'カフェ')]), 'no_spend_day')).toBeUndefined();
+    expect(rule(run([tx('2026-10-31', 500, 'カフェ')]), 'no_spend_day')).toBeUndefined(); // 使い始めたばかり
+  });
+  it('明日が使いすぎやすい曜日なら、前の日に知らせる', () => {
+    // 火曜（10/13, 10/20, 10/27）に 1 万円。今日 11/2（月）→ 明日は火曜
+    const t: Transaction[] = [];
+    for (let d = 10; d <= 31; d++) t.push(tx(`2026-10-${d}`, new Date(2026, 9, d).getDay() === 2 ? 10000 : 1000, '外食'));
+    const r = rule(run(t), 'tomorrow_peak')!;
+    expect(r.title).toBe('明日（火曜日）は使いすぎやすい日です');
+    expect(r.body).toContain('1 日平均 ¥10,000');
   });
   it('目安を超えたら注意し、残りの日の 1 日あたりを出す。一番上に出る', () => {
     const a = run([tx('2026-11-02', 20000, '外食')], [budget(230000)]);
