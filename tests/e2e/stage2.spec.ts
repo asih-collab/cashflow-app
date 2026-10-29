@@ -35,6 +35,13 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
 
     await record(page, '1500', 'デート');
     await expect(page.getByTestId('toast').filter({ hasText: '注意' })).toContainText('交際費が予算の 85%');
+
+    // 予算のない大分類はマイナスで、色を変えて出す（全体の残りからも引かれる）
+    await record(page, '2000', '日用雑貨');
+    await expect(page.getByTestId('budget-left-日用品')).toHaveText('−¥2,000');
+    await expect(page.getByTestId('budget-left-日用品')).toHaveClass(/neg/);
+    await expect(page.getByTestId('budget-left-交際費')).not.toHaveClass(/neg/);
+    await expect(page.getByTestId('remaining')).toHaveText('¥19,500');
   });
 
   test('固定費と給料を登録すると今月分が 1 回だけ自動で記録され、サマリの収支に入る', async ({ page }) => {

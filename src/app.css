@@ -14,6 +14,7 @@
   --ink: #f3f0e9;
   --ink-2: #c9c5bc;
   --muted: #7d7a73;
+  --neg: #ff4d5e;
   --faint: #4a4844;
   --line: rgba(243, 240, 233, 0.08);
   --line-strong: rgba(243, 240, 233, 0.18);
@@ -110,6 +111,7 @@ input[type=date].input { color-scheme: dark; }
 .hero .big.l { font-size: 80px; }
 .hero .big.xl { font-size: 64px; }
 .hero .big .yen { font-size: 0.42em; margin: 0.12em 0.08em 0 0; color: var(--accent); }
+.neg, .hero.over .big, .hero.over .big .yen { color: var(--neg); }
 .hero .sub { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; color: var(--ink-2); display: flex; gap: 16px; flex-wrap: wrap; }
 .hero .sub b { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: 0.02em; color: var(--ink); margin-left: 6px; }
 .progress { position: relative; height: 3px; background: var(--line-strong); margin: 18px 0 8px; }

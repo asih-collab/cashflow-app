@@ -119,14 +119,15 @@ export function renderHome(ctx: AppContext): HTMLElement {
     root.appendChild(h('div', { class: 'row', style: 'margin-top:28px' }, h('h2', { class: 'grow', style: 'margin:0' }, '予算 / Budget'), h('a', { class: 'btn sm', href: '#/budget', style: 'text-decoration:none;margin-left:10px' }, '変更')));
     const card = h('div', { class: 'card tight budget-lines', 'data-testid': 'budget-lines', style: 'margin-top:10px' });
     for (const l of bs.lines) {
-      const over = l.budget > 0 && l.remaining < 0;
+      // 予算のない大分類は予算 0 円として、使った分をマイナスで出す（全体の「あと使える」からも引いている）
+      const over = l.remaining < 0;
       card.appendChild(h('div', { class: 'list-item' },
         h('div', { class: 'row' },
           h('span', { class: 'grow', style: 'font-weight:700' }, l.name),
-          h('span', { class: 'amount', style: 'font-size:18px' }, l.budget > 0 ? (over ? `−${yen(-l.remaining)}` : yen(l.remaining)) : yen(l.spent)),
+          h('span', { class: 'amount' + (over ? ' neg' : ''), style: 'font-size:18px', 'data-testid': `budget-left-${l.name}` }, over ? `−${yen(-l.remaining)}` : yen(l.remaining)),
         ),
         l.budget > 0 ? h('div', { class: 'bar' + (over || l.ratio >= 0.8 ? ' over' : '') }, h('i', { style: `width:${Math.min(100, Math.round(l.ratio * 100))}%` })) : null,
-        h('div', { class: 'recent-meta' }, l.budget > 0 ? `${yen(l.spent)} / ${yen(l.budget)} · ${Math.round(l.ratio * 100)}%${over ? ' · 超過' : ' · 残り'}` : '予算なし · 使った額'),
+        h('div', { class: 'recent-meta' }, l.budget > 0 ? `${yen(l.spent)} / ${yen(l.budget)} · ${Math.round(l.ratio * 100)}%${over ? ' · 超過' : ' · 残り'}` : '予算なし · 全体の残りから引いています'),
       ));
     }
     root.appendChild(card);
