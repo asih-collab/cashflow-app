@@ -100,6 +100,26 @@ export function renderHome(ctx: AppContext): HTMLElement {
     }
     root.appendChild(wrap);
   }
+  // 今の期間に入るはずの固定費がまだ記録されていなければ確認する（登録が遅れた・開始月を今月にした など）
+  const missing = store.missingRecurring(now);
+  if (missing.length > 0) {
+    const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+    const box = h('div', { class: 'banner warn', 'data-testid': 'missing-recurring', style: 'margin-top:12px' },
+      h('b', null, `今の期間に入っていない固定費が ${missing.length} 件あります`),
+      h('div', { class: 'small' }, 'この期間にも払う（受け取る）なら「記録する」を押すと、予定の日付で記録して見込みに入れます。'));
+    for (const m of missing) {
+      box.appendChild(h('div', { class: 'row', style: 'gap:8px;margin-top:8px;align-items:center', 'data-testid': `missing-${m.rule.name}` },
+        h('span', { class: 'grow' }, `${m.rule.name} ${m.rule.type === 'income' ? '+' : ''}${yen(m.rule.amount)}（${md(m.date)}）`),
+        h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'missing-add', onClick: async () => {
+          await store.confirmMissingRecurring(m.rule.id, m.month);
+          toast(`${m.rule.name} を ${md(m.date)} の予定として記録しました`);
+        } }, '記録する'),
+        h('button', { class: 'btn sm', type: 'button', 'data-testid': 'missing-skip', onClick: () => store.skipMissingRecurring(m.rule.id, m.month) }, '今回はなし'),
+      ));
+    }
+    root.appendChild(box);
+  }
+
   // 目標への入金の予定の月になったら案内
   for (const due of store.dueGoalExtras()) {
     root.appendChild(h('div', { class: 'banner', 'data-testid': 'goal-extra-due', style: 'margin-top:12px' },

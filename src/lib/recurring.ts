@@ -65,3 +65,35 @@ export function dueRecurringTransactions(rules: RecurringRule[], existingIds: Se
   }
   return out;
 }
+
+/** 予算期間（給料日始まりなど）の中に入る計上の月（なければ null）。期間の始まりの月 → 終わりの月の順に見る */
+export function monthInPeriod(day: number, period: { start: string; end: string }): string | null {
+  for (const m of new Set([period.start.slice(0, 7), period.end.slice(0, 7)])) {
+    const d = postingDate(m, day);
+    if (d >= period.start && d <= period.end) return m;
+  }
+  return null;
+}
+
+export interface MissingPosting {
+  rule: RecurringRule;
+  month: string;
+  date: string;
+}
+
+/**
+ * 今の予算期間に入るはずなのに、まだ記録されていない固定費・定期の収入。
+ * 開始月を今月にして登録したため、給料日始まりの期間では前の月の分（例: 10/27）が入っていない場合など。
+ * 消した記録（existingIds に残る）と、「今回はなし」にしたもの（skipped: `ルールID:月`）は出さない。
+ */
+export function missingInPeriod(rules: RecurringRule[], existingIds: Set<string>, period: { start: string; end: string }, skipped: Set<string> = new Set()): MissingPosting[] {
+  const out: MissingPosting[] = [];
+  for (const r of rules) {
+    if (!r.is_active || r.deleted_at) continue;
+    const m = monthInPeriod(r.day_of_month, period);
+    if (!m || m >= r.start_month || (r.end_month && m > r.end_month)) continue;
+    if (existingIds.has(recurringTransactionId(r.id, m)) || skipped.has(`${r.id}:${m}`)) continue;
+    out.push({ rule: r, month: m, date: postingDate(m, r.day_of_month) });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}

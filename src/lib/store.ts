@@ -3,9 +3,9 @@
 import type { Db } from './db';
 import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
-import { toDateString } from './period';
+import { periodFor, toDateString } from './period';
 import type { AdviceFeedback, Budget, Category, Challenge, Debt, Goal, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
-import { addMonths, dueRecurringTransactions, monthKey, postingDate } from './recurring';
+import { addMonths, dueRecurringTransactions, missingInPeriod, monthInPeriod, monthKey, postingDate, type MissingPosting } from './recurring';
 import { budgetId } from './budget';
 import { REPAYMENT_CATEGORY_ID } from './debt';
 import { goalHidden } from './goal';
@@ -118,6 +118,7 @@ export class AppStore {
     this.goals = await this.db.getAll<Goal>('goals');
     this.challenges = await this.db.getAll<Challenge>('challenges');
     this.settings = { ...DEFAULT_SETTINGS, ...((await this.db.get<Settings>('settings', 'me')) ?? {}) };
+    this.skippedPostings = new Set((await this.db.get<string[]>('meta', 'skipped-postings')) ?? []);
     this.emit();
   }
 
@@ -131,6 +132,36 @@ export class AppStore {
 
   get activeRules(): RecurringRule[] {
     return this.recurringRules.filter((r) => !r.deleted_at).sort((a, b) => a.sort_order - b.sort_order || a.day_of_month - b.day_of_month);
+  }
+
+  /** 「今回はなし」にした、今の期間に入っていない固定費（`ルールID:月`。この端末だけ） */
+  private skippedPostings = new Set<string>();
+
+  /** 新しく登録する固定費の開始月: 今の予算期間に入る計上日の月（給料日 25 日始まりで 27 日の固定費なら前の月から） */
+  defaultStartMonth(day: number, today = new Date()): string {
+    return monthInPeriod(day, periodFor(today, this.settings.month_start_day)) ?? monthKey(today);
+  }
+
+  /** 今の予算期間に入るはずなのに、まだ記録されていない固定費・定期の収入（ホームで確認する） */
+  missingRecurring(today = new Date()): MissingPosting[] {
+    // 貯金の目標の先取りは「来月から」と決めて作るので、確認しない
+    const goalCats = new Set(this.goals.filter((g) => !g.deleted_at).map((g) => g.category_id));
+    const rules = this.recurringRules.filter((r) => !goalCats.has(r.category_id ?? ''));
+    return missingInPeriod(rules, new Set(this.transactions.map((t) => t.id)), periodFor(today, this.settings.month_start_day), this.skippedPostings);
+  }
+
+  /** 確認して「記録する」: 開始月をその月まで戻し、まだの分を記録する */
+  async confirmMissingRecurring(ruleId: string, month: string): Promise<void> {
+    const r = this.recurringRules.find((x) => x.id === ruleId);
+    if (!r || month >= r.start_month) return;
+    await this.saveRule({ ...r, start_month: month });
+  }
+
+  /** 確認して「今回はなし」 */
+  async skipMissingRecurring(ruleId: string, month: string): Promise<void> {
+    this.skippedPostings.add(`${ruleId}:${month}`);
+    await this.db.put('meta', [...this.skippedPostings], 'skipped-postings');
+    this.emit();
   }
 
   /** まだ計上していない月の分を計上する。何度呼んでも二重には計上しない */
@@ -154,7 +185,7 @@ export class AppStore {
       ? { ...existing, ...fields, id: existing.id, amount: Math.max(0, Math.trunc(input.amount)), updated_at: now }
       : {
           ...fields,
-          id: uuid(), sort_order: this.recurringRules.length, start_month: input.start_month ?? monthKey(new Date()), end_month: input.end_month ?? null,
+          id: uuid(), sort_order: this.recurringRules.length, start_month: input.start_month ?? this.defaultStartMonth(input.day_of_month), end_month: input.end_month ?? null,
           is_active: input.is_active ?? true, created_at: now, updated_at: now, deleted_at: null,
           amount: Math.max(0, Math.trunc(input.amount)),
         };

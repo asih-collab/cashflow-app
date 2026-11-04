@@ -6,6 +6,7 @@ import type { AppContext, Route } from '../context';
 import type { RecurringRule } from '../../lib/types';
 import { icon } from '../icons';
 import { toast } from '../toast';
+import { addMonths, monthKey } from '../../lib/recurring';
 
 export function renderRecurring(ctx: AppContext, route: Route): HTMLElement {
   const id = route.params.get('id');
@@ -31,7 +32,7 @@ export function renderRecurring(ctx: AppContext, route: Route): HTMLElement {
     card.appendChild(h('a', { class: 'list-item row-link', href: `#/recurring?id=${r.id}`, 'data-testid': `rule-${r.name}` },
       h('div', { class: 'grow' },
         h('div', { style: 'font-weight:700' }, r.name, !r.is_active ? h('span', { class: 'muted small' }, '（停止中）') : null),
-        h('div', { class: 'recent-meta' }, `毎月 ${r.day_of_month} 日 · ${cat?.name ?? '未分類'}${r.needs_review ? ' · 毎月確認' : ''}`),
+        h('div', { class: 'recent-meta' }, `毎月 ${r.day_of_month} 日 · ${cat?.name ?? '未分類'}${r.needs_review ? ' · 毎月確認' : ''}${r.start_month > monthKey(new Date()) ? ` · ${monthLabel(r.start_month)}から` : ''}`),
       ),
       h('span', { class: 'amount' + (r.type === 'income' ? ' is-income' : '') }, `${r.type === 'income' ? '+' : ''}${yen(r.amount)}`),
       icon('chevron'),
@@ -49,6 +50,17 @@ function renderRuleForm(ctx: AppContext, rule: RecurringRule | null): HTMLElemen
   const amountIn = h('input', { class: 'input', type: 'text', inputmode: 'numeric', value: rule ? group(rule.amount) : '', placeholder: '0', 'data-testid': 'rule-amount' });
   const dayIn = h('select', { class: 'input', 'data-testid': 'rule-day' });
   for (let d = 1; d <= 31; d++) dayIn.appendChild(h('option', { value: String(d), selected: (rule?.day_of_month ?? 1) === d }, d === 31 ? '31 日（月末）' : `${d} 日`));
+  // いつから: 前の月を選ぶと、まだ記録していない月の分もまとめて記録する（登録が遅れたとき・給料日始まりで前の月の分が今月の期間に入るとき）
+  const thisMonth = monthKey(new Date());
+  const startIn = h('select', { class: 'input', 'data-testid': 'rule-start' });
+  // 新しく登録するときは、今の予算期間に入る月から（給料日 25 日始まりで 27 日の固定費なら前の月の分から、期間の見込みに入る）
+  const startNow = rule?.start_month ?? store.defaultStartMonth(rule?.day_of_month ?? 1);
+  const months = new Set<string>([startNow]);
+  for (let i = -12; i <= 6; i++) months.add(addMonths(thisMonth, i));
+  for (const m of [...months].sort()) startIn.appendChild(h('option', { value: m, selected: m === startNow }, monthLabel(m)));
+  let startTouched = !!rule;
+  startIn.addEventListener('change', () => { startTouched = true; });
+  dayIn.addEventListener('change', () => { if (!startTouched) startIn.value = store.defaultStartMonth(Number(dayIn.value)); });
   const catIn = h('select', { class: 'input', 'data-testid': 'rule-category' });
   const pmIn = h('select', { class: 'input', 'data-testid': 'rule-pm' }, h('option', { value: '' }, '指定しない'));
   for (const p of store.activePaymentMethods) pmIn.appendChild(h('option', { value: p.id, selected: rule?.payment_method_id === p.id }, p.name));
@@ -80,6 +92,8 @@ function renderRuleForm(ctx: AppContext, rule: RecurringRule | null): HTMLElemen
     h('label', { class: 'field' }, h('span', null, '名前'), nameIn),
     h('label', { class: 'field' }, h('span', null, '金額（円）'), amountIn),
     h('label', { class: 'field' }, h('span', null, '毎月の日付'), dayIn),
+    h('label', { class: 'field' }, h('span', null, 'いつから'), startIn,
+      h('div', { class: 'muted small', style: 'margin-top:4px' }, '前の月にすると、まだ記録していない月の分も記録します')),
     h('label', { class: 'field' }, h('span', null, 'カテゴリ'), catIn),
     pmField,
     h('label', { class: 'list-item', style: 'border:0' }, h('span', { class: 'grow' }, '金額は毎月確認（光熱費など）', h('div', { class: 'muted small' }, '仮の金額で記録し、確定したら記録を直します')), reviewIn),
@@ -90,9 +104,9 @@ function renderRuleForm(ctx: AppContext, rule: RecurringRule | null): HTMLElemen
       await store.saveRule({
         id: rule?.id, name, amount, type, category_id: catIn.value || null,
         payment_method_id: type === 'income' ? null : pmIn.value || null,
-        day_of_month: Number(dayIn.value), needs_review: reviewIn.checked,
+        day_of_month: Number(dayIn.value), needs_review: reviewIn.checked, start_month: startIn.value,
       });
-      toast(rule ? `${name} を更新しました` : `${name} を登録しました。今月分を記録しました`);
+      toast(rule ? `${name} を更新しました` : startIn.value > thisMonth ? `${name} を登録しました。${monthLabel(startIn.value)}から記録します` : `${name} を登録しました。今の期間の分を記録しました`);
       ctx.navigate('/recurring');
     } }, '保存'),
     rule ? h('button', { class: 'btn danger big', type: 'button', 'data-testid': 'rule-delete', style: 'margin-top:10px', onClick: async () => {
@@ -105,4 +119,9 @@ function renderRuleForm(ctx: AppContext, rule: RecurringRule | null): HTMLElemen
   amountIn.addEventListener('blur', () => { const v = Number(amountIn.value.replace(/\D/g, '')); amountIn.value = v ? group(v) : ''; });
   setType(type);
   return root;
+}
+
+function monthLabel(m: string): string {
+  const [y, mo] = m.split('-').map(Number);
+  return `${y}年${mo}月`;
 }

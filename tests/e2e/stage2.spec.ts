@@ -111,6 +111,55 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await expect(page.getByTestId('history-row')).toHaveCount(1);
   });
 
+  test('「いつから」を前の月にすると、まだ記録していない前の月の分も記録される（登録が遅れた積立など）', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-11-04T12:00:00+09:00') });
+    await openApp(page, '#/recurring?id=new');
+    await page.getByTestId('rule-name').fill('積立');
+    await page.getByTestId('rule-amount').fill('40000');
+    await page.getByTestId('rule-day').selectOption('27');
+    await page.getByTestId('rule-category').selectOption({ label: '積立投資' });
+    await page.getByTestId('rule-save').tap();
+    await expect(page.getByTestId('rule-積立')).toBeVisible();
+    await page.getByTestId('rule-積立').tap();
+    await expect(page.getByTestId('rule-start')).toHaveValue('2026-11');
+    await page.getByTestId('rule-start').selectOption('2026-10');
+    await page.getByTestId('rule-save').tap();
+    await expect(page.getByTestId('rule-list')).toBeVisible();
+    await page.goto('./#/history');
+    await page.getByTestId('cal-2026-11-27').tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await page.getByTestId('month-prev').tap();
+    await page.getByTestId('cal-2026-10-27').tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await expect(page.getByTestId('history-row')).toContainText('¥40,000');
+  });
+
+  test('給料日始まりの期間: 新しい固定費は期間に入る月から。入っていない固定費はホームで確認して記録できる', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-11-04T12:00:00+09:00') });
+    await openApp(page, '#/settings');
+    await page.getByTestId('month-start-day').selectOption('25');
+    await page.goto('./#/recurring?id=new');
+    await page.getByTestId('rule-day').selectOption('27');
+    await expect(page.getByTestId('rule-start')).toHaveValue('2026-10'); // 期間 10/25〜11/24 に入る 10/27 から
+    // 以前の登録のように、今月からにした固定費
+    await page.getByTestId('rule-name').fill('動画サブスク');
+    await page.getByTestId('rule-amount').fill('1490');
+    await page.getByTestId('rule-start').selectOption('2026-11');
+    await page.getByTestId('rule-save').tap();
+    await expect(page.getByTestId('rule-list')).toBeVisible();
+    await page.goto('./#/');
+    await expect(page.getByTestId('missing-recurring')).toContainText('今の期間に入っていない固定費が 1 件');
+    await expect(page.getByTestId('missing-動画サブスク')).toContainText('¥1,490（10/27）');
+    await page.getByTestId('missing-add').tap();
+    await expect(page.getByTestId('missing-recurring')).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect(page.getByTestId('missing-recurring')).toHaveCount(0);
+    await page.goto('./#/history'); // 期間 10/25〜11/24 のカレンダー
+    await page.getByTestId('cal-2026-10-27').tap();
+    await expect(page.getByTestId('history-row')).toContainText('¥1,490');
+  });
+
   test('履歴カレンダー: 前の月の日付を押して追加し、カレンダーに戻る。記録を直せる。前月比も出る', async ({ page }) => {
     await openApp(page, '#/history');
     const nowLabel = await page.getByTestId('month-label').textContent();
