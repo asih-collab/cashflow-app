@@ -6,7 +6,7 @@ import type { AppContext, Route } from '../context';
 import type { RecurringRule } from '../../lib/types';
 import { icon } from '../icons';
 import { toast } from '../toast';
-import { addMonths, monthKey } from '../../lib/recurring';
+import { addMonths, monthKey, splitSuggestions } from '../../lib/recurring';
 
 export function renderRecurring(ctx: AppContext, route: Route): HTMLElement {
   const id = route.params.get('id');
@@ -140,21 +140,25 @@ function renderSplit(ctx: AppContext, rule: RecurringRule): HTMLElement {
     const total = read().reduce((a, x) => a + x.amount, 0);
     sumEl.textContent = `内訳の合計 ${yen(total)}（今の金額 ${yen(rule.amount)}${total !== rule.amount && total > 0 ? `、差 ${yen(Math.abs(total - rule.amount))}` : ''}）`;
   };
-  const addRow = () => {
+  const addRow = (init?: { name: string; amount: number }) => {
     const i = rows.children.length;
-    const name = h('input', { class: 'input', type: 'text', placeholder: '例: 動画配信', 'data-k': 'name', 'data-testid': `split-name-${i}`, style: 'flex:2' });
-    const amount = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: '0', 'data-k': 'amount', 'data-testid': `split-amount-${i}`, style: 'flex:1' });
+    const name = h('input', { class: 'input', type: 'text', placeholder: '例: 動画配信', value: init?.name ?? '', 'data-k': 'name', 'data-testid': `split-name-${i}`, style: 'flex:2' });
+    const amount = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: '0', value: init ? group(init.amount) : '', 'data-k': 'amount', 'data-testid': `split-amount-${i}`, style: 'flex:1' });
     amount.addEventListener('input', update);
     amount.addEventListener('blur', () => { const v = Number(amount.value.replace(/\D/g, '')); amount.value = v ? group(v) : ''; });
     rows.appendChild(h('div', { class: 'row', 'data-split-row': '', style: 'gap:8px;margin-top:8px' }, name, amount));
     update();
   };
-  addRow(); addRow();
+  // 過去に同じカテゴリで手入力した記録（メモ = サービス名）から内訳の候補を入れる
+  const suggested = splitSuggestions(store.transactions, rule);
+  if (suggested.length > 0) for (const x of suggested) addRow(x);
+  else { addRow(); addRow(); }
   const body = h('div', { style: 'display:none;margin-top:8px', 'data-testid': 'split-body' },
     h('div', { class: 'muted small' }, 'サブスクなどを 1 つずつに分けると、今の期間に入れるかを内訳ごとに選べ、要らないものだけ止められます。これまでの記録はそのまま残ります。'),
+    suggested.length > 0 ? h('div', { class: 'small', 'data-testid': 'split-suggested', style: 'margin-top:6px' }, `過去 3 か月に手入力した記録から ${suggested.length} 件入れました。違うものは名前か金額を消してください（空の行は使いません）。`) : null,
     rows, sumEl,
     h('div', { class: 'row', style: 'gap:8px;margin-top:10px' },
-      h('button', { class: 'btn sm', type: 'button', 'data-testid': 'split-add-row', onClick: addRow }, '行を足す'),
+      h('button', { class: 'btn sm', type: 'button', 'data-testid': 'split-add-row', onClick: () => addRow() }, '行を足す'),
       h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'split-save', onClick: async () => {
         const items = read().filter((x) => x.name.trim() && x.amount > 0);
         if (items.length < 2) { toast('2 つ以上の内訳（名前と金額）を入れてください'); return; }
@@ -168,3 +172,4 @@ function renderSplit(ctx: AppContext, rule: RecurringRule): HTMLElement {
     h('button', { class: 'btn link', type: 'button', 'data-testid': 'split-open', onClick: () => { body.style.display = body.style.display === 'none' ? '' : 'none'; } }, '内訳に分ける（サブスクなど）'),
     body);
 }
+

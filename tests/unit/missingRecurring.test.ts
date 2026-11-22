@@ -1,11 +1,11 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { missingInPeriod, monthInPeriod, recurringTransactionId } from '../../src/lib/recurring';
+import { missingInPeriod, monthInPeriod, recurringTransactionId, splitSuggestions } from '../../src/lib/recurring';
 import { periodFor } from '../../src/lib/period';
 import { Db } from '../../src/lib/db';
 import { AppStore } from '../../src/lib/store';
-import type { RecurringRule } from '../../src/lib/types';
+import type { RecurringRule, Transaction } from '../../src/lib/types';
 
 const rule = (name: string, day: number, start_month: string, extra: Partial<RecurringRule> = {}): RecurringRule => ({
   id: `00000000-0000-4000-8000-${String(day).padStart(12, '0')}`, name, amount: 1000, type: 'expense', category_id: null, payment_method_id: null, day_of_month: day,
@@ -97,5 +97,26 @@ describe('ストア: 内訳に分ける', () => {
     } else {
       expect(missing).toEqual([]);
     }
+  });
+});
+
+describe('内訳の候補（過去の手入力から）', () => {
+  const SUB = '11111111-0012-4000-8000-000000000001';
+  let k = 0;
+  const t = (date: string, amount: number, memo: string, extra: Partial<Transaction> = {}): Transaction => ({
+    id: `s${++k}`, date, amount, type: 'expense', category_id: SUB, payment_method_id: null, memo, source: 'manual', recurring_rule_id: null,
+    created_at: `${date}T00:00:0${k % 10}`, updated_at: 'x', deleted_at: null, ...extra,
+  });
+  it('同じカテゴリの手入力を、サービス名ごとに一番新しい金額で。自動記録・ほかのカテゴリ・古いもの・メモなしは使わない', () => {
+    const r = rule('サブスク', 22, '2026-11', { category_id: SUB });
+    const list = [
+      t('2026-10-04', 400, '食べログ'), t('2026-10-20', 450, '食べログ'),
+      t('2026-10-22', 1200, '動画'), t('2026-10-18', 3000, 'ジム'),
+      t('2026-10-22', 999, 'まとめ', { source: 'recurring' }), t('2026-10-22', 500, '外食', { category_id: 'other' }),
+      t('2026-06-01', 800, '昔の'), t('2026-10-05', 300, ''),
+    ];
+    expect(splitSuggestions(list, r, new Date(2026, 10, 22))).toEqual([
+      { name: '動画', amount: 1200 }, { name: '食べログ', amount: 450 }, { name: 'ジム', amount: 3000 },
+    ]);
   });
 });

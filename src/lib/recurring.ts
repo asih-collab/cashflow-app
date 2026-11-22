@@ -97,3 +97,18 @@ export function missingInPeriod(rules: RecurringRule[], existingIds: Set<string>
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+/** 内訳の候補: 過去 3 か月に同じカテゴリで手入力した記録。メモ（サービス名）ごとに一番新しい金額。新しい順 */
+export function splitSuggestions(transactions: Transaction[], rule: RecurringRule, today = new Date()): { name: string; amount: number }[] {
+  const from = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
+  const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+  const latest = new Map<string, Transaction>();
+  for (const t of transactions) {
+    if (t.deleted_at || t.source === 'recurring' || t.type !== rule.type || !rule.category_id || t.category_id !== rule.category_id || t.date < fromStr) continue;
+    const name = (t.memo ?? '').trim();
+    if (!name) continue;
+    const prev = latest.get(name);
+    if (!prev || t.date > prev.date || (t.date === prev.date && t.created_at > prev.created_at)) latest.set(name, t);
+  }
+  return [...latest.values()].sort((a, b) => b.date.localeCompare(a.date) || a.created_at.localeCompare(b.created_at)).map((t) => ({ name: (t.memo ?? '').trim(), amount: t.amount }));
+}
