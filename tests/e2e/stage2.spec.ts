@@ -160,6 +160,48 @@ test.describe('段階 2: 予算・自動記録・サマリ・履歴', () => {
     await expect(page.getByTestId('history-row')).toContainText('¥1,490');
   });
 
+  test('まとめたサブスクを内訳に分けると、今の期間に入れるかを内訳ごとに選べる', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-11-04T12:00:00+09:00') });
+    await openApp(page, '#/settings');
+    await page.getByTestId('month-start-day').selectOption('25');
+    await page.goto('./#/recurring?id=new');
+    await page.getByTestId('rule-name').fill('サブスク');
+    await page.getByTestId('rule-amount').fill('3000');
+    await page.getByTestId('rule-day').selectOption('27');
+    await page.getByTestId('rule-category').selectOption({ label: 'サブスク' });
+    await page.getByTestId('rule-start').selectOption('2026-11'); // 以前の登録のように今月から
+    await page.getByTestId('rule-save').tap();
+    await page.getByTestId('rule-サブスク').tap();
+    await page.getByTestId('split-open').tap();
+    await page.getByTestId('split-name-0').fill('動画');
+    await page.getByTestId('split-amount-0').fill('1000');
+    await page.getByTestId('split-name-1').fill('音楽');
+    await page.getByTestId('split-amount-1').fill('1500');
+    await page.getByTestId('split-add-row').tap();
+    await page.getByTestId('split-name-2').fill('雑誌');
+    await page.getByTestId('split-amount-2').fill('500');
+    await expect(page.getByTestId('split-sum')).toContainText('内訳の合計 ¥3,000');
+    await page.getByTestId('split-save').tap();
+    await expect(page.getByTestId('rule-list')).toContainText('動画');
+    await expect(page.getByTestId('rule-サブスク')).toHaveCount(0);
+
+    await page.goto('./#/');
+    const box = page.getByTestId('missing-recurring');
+    await expect(box).toContainText('サブスク（3 件）');
+    await expect(page.getByTestId('missing-total')).toHaveText('選んだ支出 ¥3,000');
+    await page.getByTestId('missing-check-雑誌').uncheck();
+    await expect(page.getByTestId('missing-total')).toHaveText('選んだ支出 ¥2,500');
+    await page.getByTestId('missing-add').tap();
+    await expect(box).toHaveCount(0);
+    await page.goto('./#/history');
+    await page.getByTestId('cal-2026-10-27').tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(2);
+    await page.getByTestId('month-next').tap(); // 次の期間 11/25〜
+    await page.getByTestId('cal-2026-11-27').tap();
+    await expect(page.getByTestId('history-row')).toHaveCount(1); // 11 月分はまとめたルールの記録のまま（二重にならない）
+    await expect(page.getByTestId('history-row')).toContainText('¥3,000');
+  });
+
   test('履歴カレンダー: 前の月の日付を押して追加し、カレンダーに戻る。記録を直せる。前月比も出る', async ({ page }) => {
     await openApp(page, '#/history');
     const nowLabel = await page.getByTestId('month-label').textContent();

@@ -106,17 +106,45 @@ export function renderHome(ctx: AppContext): HTMLElement {
     const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
     const box = h('div', { class: 'banner warn', 'data-testid': 'missing-recurring', style: 'margin-top:12px' },
       h('b', null, `今の期間に入っていない固定費が ${missing.length} 件あります`),
-      h('div', { class: 'small' }, 'この期間にも払う（受け取る）なら「記録する」を押すと、予定の日付で記録して見込みに入れます。'));
+      h('div', { class: 'small' }, 'この期間に払う（受け取る）ものにチェックを入れて「記録する」を押すと、予定の日付で記録して見込みに入れます。チェックを外したものは今回はなしにします。'));
+    // カテゴリ（サブスクなど）ごとにまとめて、内訳を 1 つずつ選べるようにする
+    const checks: { m: (typeof missing)[number]; input: HTMLInputElement }[] = [];
+    const groups = new Map<string, typeof missing>();
     for (const m of missing) {
-      box.appendChild(h('div', { class: 'row', style: 'gap:8px;margin-top:8px;align-items:center', 'data-testid': `missing-${m.rule.name}` },
-        h('span', { class: 'grow' }, `${m.rule.name} ${m.rule.type === 'income' ? '+' : ''}${yen(m.rule.amount)}（${md(m.date)}）`),
-        h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'missing-add', onClick: async () => {
-          await store.confirmMissingRecurring(m.rule.id, m.month);
-          toast(`${m.rule.name} を ${md(m.date)} の予定として記録しました`);
-        } }, '記録する'),
-        h('button', { class: 'btn sm', type: 'button', 'data-testid': 'missing-skip', onClick: () => store.skipMissingRecurring(m.rule.id, m.month) }, '今回はなし'),
-      ));
+      const cat = categoryById(store.categories, m.rule.category_id);
+      const name = (cat?.parent_id ? categoryById(store.categories, cat.parent_id) : cat)?.name ?? 'その他';
+      groups.set(name, [...(groups.get(name) ?? []), m]);
     }
+    const totalEl = h('span', { class: 'mono', 'data-testid': 'missing-total' });
+    const updateTotal = () => {
+      const sum = checks.filter((c) => c.input.checked).reduce((a, c) => a + (c.m.rule.type === 'income' ? 0 : c.m.rule.amount), 0);
+      totalEl.textContent = `選んだ支出 ${yen(sum)}`;
+    };
+    for (const [name, items] of groups) {
+      if (groups.size > 1 || items.length > 1) box.appendChild(h('div', { class: 'small', style: 'margin-top:10px;font-weight:700' }, `${name}${items.length > 1 ? `（${items.length} 件）` : ''}`));
+      for (const m of items) {
+        const input = h('input', { type: 'checkbox', class: 'toggle', checked: true, 'data-testid': `missing-check-${m.rule.name}`, onChange: updateTotal }) as HTMLInputElement;
+        checks.push({ m, input });
+        box.appendChild(h('label', { class: 'row', style: 'gap:8px;margin-top:6px;align-items:center', 'data-testid': `missing-${m.rule.name}` },
+          h('span', { class: 'grow' }, `${m.rule.name} ${m.rule.type === 'income' ? '+' : ''}${yen(m.rule.amount)}（${md(m.date)}）`),
+          input,
+        ));
+      }
+    }
+    updateTotal();
+    box.appendChild(h('div', { class: 'row', style: 'gap:8px;margin-top:10px;align-items:center' },
+      h('span', { class: 'grow' }, totalEl),
+      h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'missing-add', onClick: async () => {
+        const picked = checks.filter((c) => c.input.checked);
+        // 先に「なし」を記録してから記録する（記録のたびに画面が描き直されるため）
+        for (const c of checks) if (!c.input.checked) await store.skipMissingRecurring(c.m.rule.id, c.m.month);
+        for (const c of picked) await store.confirmMissingRecurring(c.m.rule.id, c.m.month);
+        toast(picked.length > 0 ? `${picked.map((c) => c.m.rule.name).join('・')} を予定として記録しました` : '今回はなしにしました');
+      } }, '記録する'),
+      h('button', { class: 'btn sm', type: 'button', 'data-testid': 'missing-skip', onClick: async () => {
+        for (const c of checks) await store.skipMissingRecurring(c.m.rule.id, c.m.month);
+      } }, '全部なし'),
+    ));
     root.appendChild(box);
   }
 

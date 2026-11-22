@@ -63,3 +63,39 @@ describe('ストア: 期間に合わせた開始月と確認', () => {
     expect(s.missingRecurring(today)).toEqual([]); // 開き直しても出ない
   });
 });
+
+describe('ストア: 内訳に分ける', () => {
+  it('まとめたサブスクを内訳に分けると、これまでの記録は残り、内訳は次の月から。今の期間の分は内訳ごとに選べて二重にならない', async () => {
+    const s = new AppStore(new Db(new IDBFactory(), 'split'));
+    await s.init();
+    const today = new Date();
+    await s.updateSettings({ month_start_day: 25 });
+    const p = periodFor(today, 25);
+    const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    // 以前の登録: 今月から（今の期間に入る前の月の分が抜けている場合がある）
+    const agg = await s.saveRule({ name: 'サブスク', amount: 3000, type: 'expense', category_id: null, payment_method_id: null, day_of_month: 27, needs_review: false, start_month: thisMonth });
+    const before = s.liveTransactions.filter((t) => t.recurring_rule_id === agg.id).map((t) => t.id);
+    expect(before).toHaveLength(1);
+    const parts = await s.splitRule(agg.id, [{ name: '動画', amount: 1000 }, { name: '音楽', amount: 1500 }, { name: '雑誌', amount: 500 }]);
+    expect(parts.map((r) => r.start_month)).toEqual(Array(3).fill(parts[0]!.start_month));
+    expect(parts[0]!.start_month > thisMonth).toBe(true);
+    expect(s.activeRules.map((r) => r.name)).toEqual(['動画', '音楽', '雑誌']);
+    expect(s.liveTransactions.filter((t) => t.recurring_rule_id === agg.id).map((t) => t.id)).toEqual(before); // これまでの記録は残る
+    expect(s.liveTransactions.filter((t) => parts.some((r) => r.id === t.recurring_rule_id))).toHaveLength(0); // 内訳はまだ記録しない
+
+    const m = monthInPeriod(27, p)!;
+    const missing = s.missingRecurring(today);
+    if (m < thisMonth) {
+      // 今の期間の分（前の月の 27 日）は元のルールで記録されていない → 内訳ごとに確認に出る
+      expect(missing.map((x) => x.rule.name)).toEqual(['動画', '音楽', '雑誌']);
+      await s.confirmMissingRecurring(parts[0]!.id, m);
+      await s.skipMissingRecurring(parts[2]!.id, m);
+      await s.confirmMissingRecurring(parts[1]!.id, m);
+      expect(s.missingRecurring(today)).toEqual([]);
+      const posted = s.liveTransactions.filter((t) => parts.some((r) => r.id === t.recurring_rule_id));
+      expect(posted.map((t) => [t.memo, t.date])).toEqual([['動画', `${m}-27`], ['音楽', `${m}-27`]]); // その月の分だけ
+    } else {
+      expect(missing).toEqual([]);
+    }
+  });
+});

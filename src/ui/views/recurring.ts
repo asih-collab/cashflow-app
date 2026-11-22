@@ -109,6 +109,7 @@ function renderRuleForm(ctx: AppContext, rule: RecurringRule | null): HTMLElemen
       toast(rule ? `${name} を更新しました` : startIn.value > thisMonth ? `${name} を登録しました。${monthLabel(startIn.value)}から記録します` : `${name} を登録しました。今の期間の分を記録しました`);
       ctx.navigate('/recurring');
     } }, '保存'),
+    rule ? renderSplit(ctx, rule) : null,
     rule ? h('button', { class: 'btn danger big', type: 'button', 'data-testid': 'rule-delete', style: 'margin-top:10px', onClick: async () => {
       if (!confirm(`「${rule.name}」の自動記録をやめますか？ これまでの記録は残ります。`)) return;
       await store.deleteRule(rule.id);
@@ -124,4 +125,46 @@ function renderRuleForm(ctx: AppContext, rule: RecurringRule | null): HTMLElemen
 function monthLabel(m: string): string {
   const [y, mo] = m.split('-').map(Number);
   return `${y}年${mo}月`;
+}
+
+/** 内訳に分ける: まとめて登録した固定費（サブスクなど）を、1 つずつのルールにする。今の期間に入れるかを内訳ごとに選べるように */
+function renderSplit(ctx: AppContext, rule: RecurringRule): HTMLElement {
+  const { store } = ctx;
+  const rows = h('div', null);
+  const sumEl = h('div', { class: 'muted small', 'data-testid': 'split-sum', style: 'margin-top:6px' });
+  const read = () => [...rows.querySelectorAll<HTMLElement>('[data-split-row]')].map((r) => ({
+    name: (r.querySelector('[data-k="name"]') as HTMLInputElement).value,
+    amount: Number((r.querySelector('[data-k="amount"]') as HTMLInputElement).value.replace(/\D/g, '')) || 0,
+  }));
+  const update = () => {
+    const total = read().reduce((a, x) => a + x.amount, 0);
+    sumEl.textContent = `内訳の合計 ${yen(total)}（今の金額 ${yen(rule.amount)}${total !== rule.amount && total > 0 ? `、差 ${yen(Math.abs(total - rule.amount))}` : ''}）`;
+  };
+  const addRow = () => {
+    const i = rows.children.length;
+    const name = h('input', { class: 'input', type: 'text', placeholder: '例: 動画配信', 'data-k': 'name', 'data-testid': `split-name-${i}`, style: 'flex:2' });
+    const amount = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: '0', 'data-k': 'amount', 'data-testid': `split-amount-${i}`, style: 'flex:1' });
+    amount.addEventListener('input', update);
+    amount.addEventListener('blur', () => { const v = Number(amount.value.replace(/\D/g, '')); amount.value = v ? group(v) : ''; });
+    rows.appendChild(h('div', { class: 'row', 'data-split-row': '', style: 'gap:8px;margin-top:8px' }, name, amount));
+    update();
+  };
+  addRow(); addRow();
+  const body = h('div', { style: 'display:none;margin-top:8px', 'data-testid': 'split-body' },
+    h('div', { class: 'muted small' }, 'サブスクなどを 1 つずつに分けると、今の期間に入れるかを内訳ごとに選べ、要らないものだけ止められます。これまでの記録はそのまま残ります。'),
+    rows, sumEl,
+    h('div', { class: 'row', style: 'gap:8px;margin-top:10px' },
+      h('button', { class: 'btn sm', type: 'button', 'data-testid': 'split-add-row', onClick: addRow }, '行を足す'),
+      h('button', { class: 'btn sm primary', type: 'button', 'data-testid': 'split-save', onClick: async () => {
+        const items = read().filter((x) => x.name.trim() && x.amount > 0);
+        if (items.length < 2) { toast('2 つ以上の内訳（名前と金額）を入れてください'); return; }
+        await store.splitRule(rule.id, items);
+        toast(`${rule.name} を ${items.length} つに分けました`);
+        ctx.navigate('/recurring');
+      } }, '分けて保存'),
+    ),
+  );
+  return h('div', { class: 'card', style: 'margin-top:14px' },
+    h('button', { class: 'btn link', type: 'button', 'data-testid': 'split-open', onClick: () => { body.style.display = body.style.display === 'none' ? '' : 'none'; } }, '内訳に分ける（サブスクなど）'),
+    body);
 }

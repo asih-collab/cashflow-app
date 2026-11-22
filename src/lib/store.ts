@@ -150,11 +150,19 @@ export class AppStore {
     return missingInPeriod(rules, new Set(this.transactions.map((t) => t.id)), periodFor(today, this.settings.month_start_day), this.skippedPostings);
   }
 
-  /** 確認して「記録する」: 開始月をその月まで戻し、まだの分を記録する */
+  /** 確認して「記録する」: その月の分だけを、自動記録と同じ ID・予定の日付で記録する（ほかの月は増やさない。内訳に分けた後でも二重にならない） */
   async confirmMissingRecurring(ruleId: string, month: string): Promise<void> {
     const r = this.recurringRules.find((x) => x.id === ruleId);
-    if (!r || month >= r.start_month) return;
-    await this.saveRule({ ...r, start_month: month });
+    if (!r) return;
+    const existing = new Set(this.transactions.map((t) => t.id));
+    const [y, m] = month.split('-').map(Number);
+    const due = dueRecurringTransactions([{ ...r, start_month: month, end_month: month }], existing, new Date(y!, m! - 1, 1), nowIso());
+    if (due.length === 0) return;
+    await this.db.putMany('transactions', due);
+    for (const t of due) await this.syncer?.markDirty('transactions', t.id, t.updated_at);
+    this.transactions.push(...due);
+    this.emit();
+    this.requestSync();
   }
 
   /** 確認して「今回はなし」 */
@@ -214,6 +222,29 @@ export class AppStore {
   }
 
   /** ルールを止める（今後の月は計上しない。計上済みの記録は残す） */
+  /**
+   * まとめて登録した固定費（例: サブスク）を内訳ごとのルールに分ける。
+   * これまでの記録は元のルールのまま残し、内訳のルールは元のルールが記録した最後の月の次の月から記録する（二重にしない）。
+   * 今の期間に入るはずの分が元のルールで記録されていなければ、ホームの確認に内訳ごとに出る。
+   */
+  async splitRule(id: string, items: { name: string; amount: number }[]): Promise<RecurringRule[]> {
+    const r = this.recurringRules.find((x) => x.id === id && !x.deleted_at);
+    const valid = items.map((x) => ({ name: x.name.trim(), amount: Math.trunc(x.amount) })).filter((x) => x.name && x.amount > 0);
+    if (!r || valid.length === 0) return [];
+    const posted = this.transactions.filter((t) => t.recurring_rule_id === r.id).map((t) => t.date.slice(0, 7)).sort();
+    const last = posted[posted.length - 1];
+    const start = last && last >= r.start_month ? addMonths(last, 1) : r.start_month;
+    const out: RecurringRule[] = [];
+    for (const x of valid) {
+      out.push(await this.saveRule({
+        name: x.name, amount: x.amount, type: r.type, category_id: r.category_id, payment_method_id: r.payment_method_id,
+        day_of_month: r.day_of_month, needs_review: r.needs_review, start_month: start, end_month: r.end_month, is_active: r.is_active,
+      }));
+    }
+    await this.deleteRule(r.id);
+    return out;
+  }
+
   async deleteRule(id: string): Promise<void> {
     const r = this.recurringRules.find((x) => x.id === id);
     if (!r) return;
