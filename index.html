@@ -20,6 +20,12 @@
       <nav id="tabbar" class="tabbar" aria-label="メイン"></nav>
     </div>
     <div id="toast-root"></div>
+    <!-- iPhone のホーム画面アプリは manifest の向きの指定を使わず、画面の向きも固定できないので、横向きのときは縦に戻すよう案内する -->
+    <div class="rotate-lock" data-testid="rotate-lock" role="alert">
+      <div class="rotate-lock-phone" aria-hidden="true"></div>
+      <b>縦向きで使ってください</b>
+      <span>横向きにしても画面は回りません。iPhone のコントロールセンターで「画面縦向きのロック」をオンにすると、傾けても回らなくなります</span>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

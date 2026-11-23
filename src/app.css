@@ -417,3 +417,16 @@ a.advice-title::after { content: " →"; color: var(--muted); font-weight: 400; 
 .add-view .preview { font-size: 13px; line-height: 1.6; color: var(--ink-2); min-height: 20px; margin: 4px 2px 0; text-align: right; }
 .add-view .preview b { color: var(--ink); }
 .add-view .preview .warn { color: var(--accent); font-weight: 700; }
+
+/* 横向き（スマホ）のときは、画面を横に組み替えず縦に戻すよう案内する（iPhone は向きを固定できないため） */
+.rotate-lock { display: none; }
+@media (orientation: landscape) and (max-height: 500px) and (hover: none) {
+  #app, #toast-root { visibility: hidden; }
+  .rotate-lock {
+    display: flex; position: fixed; inset: 0; z-index: 1000; background: var(--bg); color: var(--ink);
+    flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px 64px; text-align: center;
+  }
+  .rotate-lock b { font-size: 18px; }
+  .rotate-lock span { font-size: 13px; color: var(--muted); max-width: 420px; line-height: 1.6; }
+  .rotate-lock-phone { width: 28px; height: 46px; border: 2px solid var(--accent); border-radius: 6px; margin-bottom: 6px; }
+}
