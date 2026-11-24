@@ -100,6 +100,14 @@ export function renderHome(ctx: AppContext): HTMLElement {
     }
     root.appendChild(wrap);
   }
+  // 月終わり: ふり返りと来月の見通しができたら知らせる（期間の最終日〜次の期間の 7 日目、開くまで）
+  const report = store.reportToAnnounce(now);
+  if (report) {
+    root.appendChild(h('a', { class: 'banner', href: '#/report', 'data-testid': 'report-banner', style: 'display:block;text-decoration:none;margin-top:12px' },
+      h('b', null, `${report.period.label}のふり返りと来月の見通しができました`),
+      h('div', { class: 'small' }, `あなたの記録から、アドバイス ${report.tips.length} 件と来月の予算の案を作りました。`)));
+  }
+
   // 今の期間に入るはずの固定費がまだ記録されていなければ確認する（登録が遅れた・開始月を今月にした など）
   const missing = store.missingRecurring(now);
   if (missing.length > 0) {

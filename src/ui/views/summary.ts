@@ -46,6 +46,13 @@ export function renderSummary(ctx: AppContext, route: Route): HTMLElement {
     ),
   ));
 
+  // 月終わりのふり返りと来月の見通し（期間が 1 回終わってから）
+  const rep = isCurrent ? store.monthlyReport() : null;
+  if (rep) {
+    root.appendChild(h('a', { class: 'banner', href: '#/report', 'data-testid': 'report-link', style: 'display:block;text-decoration:none;margin-top:12px' },
+      h('b', null, `${rep.period.label}のふり返りと、来月の見通し`), h('div', { class: 'small' }, `アドバイス ${rep.tips.length} 件・来月の予算の案`)));
+  }
+
   // 改善アドバイス（今月を見ているときだけ。全部）
   if (isCurrent) {
     root.appendChild(h('h2', null, '気づき / Insights'));

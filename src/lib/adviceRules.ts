@@ -6,6 +6,7 @@
 
 import type { Advice, AdviceContext } from './advice';
 import type { DailyContext } from './dailyAdvice';
+import type { MonthlyReport } from './monthlyReport';
 import { debtOverview, monthLabel, pendingLumps, totalPlan } from './debt';
 import { yen } from './money';
 
@@ -418,4 +419,255 @@ function challengeAlert(c: DailyContext): Advice[] {
 
 export const DAILY_RULES: ((c: DailyContext) => Advice[])[] = [
   dailyAllowance, habitToday, noSpendDay, tomorrowPeak, yesterdayRecap, repeatToday, bigPurchase, weekdayPeak, upcomingFixed, payday, challengeAlert,
+];
+
+// ---- 月終わりのふり返り（月ごと） ----------------------------------------------------
+// 予算期間が終わったときに、その期間の記録と来月の見通しから。key に期間の始まりの日を入れる（反応は期間ごと）。
+// 季節の役立ち情報は「来月（次の期間の最終日の月）」に合わせて出す。
+
+export const MONTHLY_LIMITS = {
+  /** 出す件数 */
+  count: 7,
+  /** 季節の役立ち情報の件数 */
+  seasonalMax: 2,
+  /** 役立ち情報（季節・お金の仕組み）に必ず取る枠 */
+  infoSlots: 3,
+  /** 黒字・赤字として扱う最小額 */
+  balanceMin: 10000,
+  /** 来月の見込みが予算をこれ以上超えたら知らせる */
+  forecastOverMin: 3000,
+  /** 先月より増えた: 何倍以上、かつ何円以上 */
+  risingRatio: 1.2,
+  risingMin: 5000,
+  /** 習慣の出費: 回数・1 回平均の上限 */
+  habitMin: 8,
+  habitMaxAvg: 2000,
+  /** 土日に偏っている: 変動費のうち土日の割合、そのときの変動費の最小額 */
+  weekendShare: 0.5,
+  weekendMinVariable: 30000,
+  /** 使わない日が多いと褒める日数 */
+  noSpendGood: 6,
+  /** リボの金利の話をする年率 */
+  highRate: 12,
+} as const;
+
+const W = 4.3; // 1 か月の週の数
+
+/** 先月の収支（赤字・黒字の使い道） */
+function mBalance(r: MonthlyReport): Advice[] {
+  const key = (k: string) => `${k}:${r.period.start}`;
+  if (r.income <= 0) return [];
+  if (r.balance <= -MONTHLY_LIMITS.balanceMin) {
+    const top = [...r.lines].sort((a, b) => (b.actual - (b.budget ?? b.actual)) - (a.actual - (a.budget ?? a.actual)) || b.actual - a.actual)[0];
+    return [{
+      rule: 'm_deficit', key: key('m_deficit'), level: 'warn', priority: 95, href: '#/summary',
+      title: `${r.period.label}は ${yen(-r.balance)} の赤字でした`,
+      body: `収入 ${yen(r.income)} に対して、固定費 ${yen(r.fixed)}・変動費 ${yen(r.variable)}。${top ? `いちばん大きいのは${top.name}（${yen(top.actual)}）。` : ''}${r.forecast.balance < 0 ? `来月も今のペースだと約 ${yen(-r.forecast.balance)} の赤字見込みです。変動費を週 ${yen(Math.ceil(-r.forecast.balance / W / 100) * 100)} 減らすと収支がとれます。` : '来月の見通しは黒字です。この差を守れれば大丈夫。'}`,
+    }];
+  }
+  if (r.balance >= MONTHLY_LIMITS.balanceMin) {
+    const d = r.topDebt;
+    if (d && d.rate >= MONTHLY_LIMITS.highRate) {
+      const amt = Math.min(r.balance, d.balance);
+      return [{
+        rule: 'm_surplus', key: key('m_surplus'), level: 'good', priority: 80, href: '#/debts',
+        title: `${r.period.label}は ${yen(r.balance)} の黒字でした`,
+        body: `このうち ${yen(amt)} を${d.name}（年 ${d.rate}%）の繰り上げ返済に回すと、手数料が年およそ ${yen(Math.round(amt * d.rate / 100))} 減ります。確実に「年 ${d.rate}% で増える」のと同じなので、ほかのどこに置くより有利です。`,
+      }];
+    }
+    const g = r.goals.find((x) => x.ratio < 1);
+    return [{
+      rule: 'm_surplus', key: key('m_surplus'), level: 'good', priority: 80, href: g ? '#/goals' : '#/summary',
+      title: `${r.period.label}は ${yen(r.balance)} の黒字でした`,
+      body: g ? `口座に置いたままだと、なんとなく使ってしまいがちです。今日のうちに${g.label}へ移しておきましょう（今 ${yen(g.total)} / ${yen(g.target)}）。` : '口座に置いたままだと使ってしまいがちです。今日のうちに貯金用の口座へ移しておきましょう。',
+    }];
+  }
+  return [];
+}
+
+/** 予算を超えた大分類（来月の週の目安） */
+function mOverBudget(r: MonthlyReport): Advice[] {
+  return r.lines.filter((l) => l.budget !== null && l.actual > l.budget).sort((a, b) => (b.actual - b.budget!) - (a.actual - a.budget!)).slice(0, 2).map((l) => {
+    const nb = l.nextBudget ?? l.budget!;
+    return {
+      rule: 'm_over_budget', key: `m_over_budget:${l.name}:${r.period.start}`, level: 'warn' as const, priority: 90, href: '#/budget',
+      title: `${l.name}が予算を ${yen(l.actual - l.budget!)} 超えました`,
+      body: `${yen(l.actual)} / 予算 ${yen(l.budget!)}。来月は週 ${yen(Math.floor(nb / W / 100) * 100)} が目安です。週の初めに「今週の${l.name}」の上限を決めておくと守りやすくなります。`,
+    };
+  });
+}
+
+/** 来月の見込みが予算を超えそう */
+function mForecastOver(r: MonthlyReport): Advice[] {
+  const l = r.lines.map((x) => ({ x, b: x.nextBudget ?? x.budget })).filter(({ x, b }) => b !== null && x.predicted - b >= MONTHLY_LIMITS.forecastOverMin && !(x.budget !== null && x.actual > x.budget))
+    .sort((a, b) => (b.x.predicted - b.b!) - (a.x.predicted - a.b!))[0];
+  if (!l) return [];
+  return [{
+    rule: 'm_forecast_over', key: `m_forecast_over:${l.x.name}:${r.period.start}`, level: 'info', priority: 70, href: '#/budget',
+    title: `来月の${l.x.name}は約 ${yen(l.x.predicted)} の見込み（予算 ${yen(l.b!)}）`,
+    body: 'ここ数か月の記録からの見込みです。予算を見込みに合わせるか、使い方を変えるか、どちらかを先に決めておきましょう。決めないまま月に入ると、たいてい見込みどおりになります。',
+  }];
+}
+
+/** 先月より大きく増えた大分類 */
+function mRising(r: MonthlyReport): Advice[] {
+  const l = r.lines.filter((x) => x.prev !== null && x.prev > 0 && x.actual >= x.prev * MONTHLY_LIMITS.risingRatio && x.actual - x.prev >= MONTHLY_LIMITS.risingMin)
+    .sort((a, b) => (b.actual - b.prev!) - (a.actual - a.prev!))[0];
+  if (!l) return [];
+  return [{
+    rule: 'm_rising', key: `m_rising:${l.name}:${r.period.start}`, level: 'info', priority: 66, href: '#/history?v=list',
+    title: `${l.name}が先月より ${yen(l.actual - l.prev!)} 増えました`,
+    body: `${yen(l.prev!)} → ${yen(l.actual)}。一度きりの出費なら気にしなくて大丈夫。続くようなら、何が増えたのか履歴で一度だけ見ておくと、来月の使い方が決めやすくなります。`,
+  }];
+}
+
+/** 来月の一括返済・貯金の予定 */
+function mEvents(r: MonthlyReport): Advice[] {
+  if (r.events.length === 0) return [];
+  const total = r.events.reduce((a, e) => a + e.amount, 0);
+  return [{
+    rule: 'm_events', key: `m_events:${r.period.start}`, level: 'info', priority: 92, href: r.events.some((e) => e.kind === 'debt') ? '#/debts' : '#/goals',
+    title: `来月は ${r.events.map((e) => e.label).join('・')}（計 ${yen(total)}）の予定です`,
+    body: 'ボーナスなどが入ったら、その日のうちに予定の分を移すのがいちばん確実です。「残ったら」にすると、ほぼ確実に減ります。終わったら、返済・目標の画面で「済み」にしてください。',
+  }];
+}
+
+/** サブスクの棚卸し（3 か月に 1 回） */
+function mSubscriptions(r: MonthlyReport): Advice[] {
+  const month = Number(r.next.end.slice(5, 7));
+  const total = r.subscriptions.reduce((a, x) => a + x.amount, 0);
+  if (month % 3 !== 0 || total < 3000) return [];
+  return [{
+    rule: 'm_subscriptions', key: `m_subscriptions:${r.period.start}`, level: 'info', priority: 60, href: '#/recurring',
+    title: `サブスクは月 ${yen(total)}、1 年で ${yen(total * 12)}`,
+    body: `${r.subscriptions.length} 件（${r.subscriptions.slice(0, 4).map((x) => x.name).join('・')}${r.subscriptions.length > 4 ? ' など' : ''}）。3 か月に 1 回の棚卸しの時期です。「この 1 か月で使ったか」で分けて、使っていないものは一度止めてみましょう。困ったらまた入ればいいだけです。`,
+  }];
+}
+
+/** 習慣になっている小さな出費 */
+function mHabit(r: MonthlyReport): Advice[] {
+  const x = r.habits.find((h) => h.count >= MONTHLY_LIMITS.habitMin && h.total / h.count <= MONTHLY_LIMITS.habitMaxAvg);
+  if (!x) return [];
+  const avg = Math.round(x.total / x.count);
+  return [{
+    rule: 'm_habit', key: `m_habit:${x.name}:${r.period.start}`, level: 'info', priority: 62, href: '#/history?v=list',
+    title: `${x.name}は先月 ${x.count} 回・${yen(x.total)}`,
+    body: `1 回 ${yen(avg)} でも、1 年にすると約 ${yen(x.total * 12)}。全部やめなくても、週に 1 回減らすだけで年 ${yen(avg * 52)} 浮きます。「買う前に 1 回だけ考える日」を決めるのがおすすめです。`,
+  }];
+}
+
+/** 使わない日 */
+function mNoSpend(r: MonthlyReport): Advice[] {
+  if (r.trackedDays < 14) return [];
+  if (r.noSpendDays >= MONTHLY_LIMITS.noSpendGood) {
+    return [{ rule: 'm_no_spend', key: `m_no_spend:${r.period.start}`, level: 'good', priority: 52, title: `使わない日が ${r.noSpendDays} 日ありました`, body: 'お金を使わない日は、いちばん簡単で効く節約です。来月も同じくらいを目指しましょう。' }];
+  }
+  return [{ rule: 'm_no_spend', key: `m_no_spend:${r.period.start}`, level: 'info', priority: 50, title: `使わない日は ${r.noSpendDays} 日でした`, body: '週に 1 日、「今日は何も買わない日」を決めてみませんか。お弁当と水筒を持っていく日にすると続けやすいです。' }];
+}
+
+/** 土日に偏っている */
+function mWeekend(r: MonthlyReport): Advice[] {
+  if (r.weekendShare < MONTHLY_LIMITS.weekendShare || r.variable < MONTHLY_LIMITS.weekendMinVariable) return [];
+  return [{
+    rule: 'm_weekend', key: `m_weekend:${r.period.start}`, level: 'info', priority: 58,
+    title: `変動費の ${Math.round(r.weekendShare * 100)}% が土日でした`,
+    body: '土日は 1 か月の 3 割ほどしかないので、かなり偏っています。金曜の夜に「この週末に使う額」を決めておくと、使いすぎを防げます。',
+  }];
+}
+
+/** 目標の進み具合 */
+function mGoal(r: MonthlyReport): Advice[] {
+  return r.goals.filter((g) => g.ratio < 1).slice(0, 1).map((g) => ({
+    rule: 'm_goal', key: `m_goal:${r.period.start}`, level: 'good' as const, priority: 48, href: '#/goals',
+    title: `${g.label}: ${Math.round(g.ratio * 100)}%（${yen(g.total)} / ${yen(g.target)}）`,
+    body: g.reachMonth ? `今のペースなら ${monthLabel(g.reachMonth)}に届きます。黒字の月に少しでも足すと、その分だけ早まります。` : '今のペースだと 10 年以内に届きません。毎月の先取りを少しだけ増やすか、ボーナスからの入金を予定に入れましょう。',
+  }));
+}
+
+/** リボの金利の仕組み（年率の高い借入があるとき、季節の情報と同じ枠で） */
+function revoMath(r: MonthlyReport): Advice[] {
+  const d = r.topDebt;
+  if (!d || d.rate < MONTHLY_LIMITS.highRate) return [];
+  return [{
+    rule: 'm_info_revo', key: `m_info_revo:${r.period.start}`, level: 'info', priority: 40, href: '#/debts',
+    title: `${d.name}の年 ${d.rate}% は、10 万円あたり年約 ${yen(Math.round(100000 * d.rate / 100))}`,
+    body: '投資の長い目で見た利回りは年 3〜5% 程度と言われます。それより高い金利の借入があるうちは、余ったお金は返済に回すのが一番の「運用」です。新しくリボで買い物をしないのも大事です。',
+  }];
+}
+
+/** 季節の役立ち情報（来月に合わせて） */
+function seasonal(r: MonthlyReport): Advice[] {
+  const ym = r.next.end.slice(0, 7);
+  const month = Number(ym.slice(5, 7));
+  const social = r.lines.find((l) => l.name === '交際費');
+  const tip = (id: string, title: string, body: string, href?: string): Advice => ({ rule: `m_info_${id}`, key: `m_info_${id}:${ym}`, level: 'info', priority: 45, title, body, ...(href ? { href } : {}) });
+  const out: Advice[] = [];
+  switch (month) {
+    case 1:
+      out.push(tip('nisa_new_year', '新しい年の NISA の枠が使えるようになります', 'NISA の年間の枠は、年をまたいで繰り越せません。積立の設定額がこれでいいか、年の初めに一度だけ見直しておきましょう。'));
+      out.push(tip('new_year_sale', '初売り・福袋は「買う物を決めてから」', 'セールで安くなるのは「もともと買う予定だった物」だけです。行く前にメモに書いた物以外は買わない、と決めておくと安心です。'));
+      break;
+    case 2:
+      out.push(tip('tax_return', '確定申告は 2/16〜3/15（医療費控除など）', '1 年の医療費（家族分も合わせて）が 10 万円を超えたら、医療費控除で税金が戻るかもしれません。病院や薬局のレシートを捨てずにまとめておきましょう。ふるさと納税を 6 か所以上にした人も確定申告が必要です。'));
+      break;
+    case 3:
+      out.push(tip('fiscal_end', '3 月は送別会と引っ越しの季節', '送別会が重なりやすい月です。交際費の予算を少し多めにしておき、ほかで調整するのが現実的です。引っ越しの予定があるなら、3 月下旬は料金が一番高い時期なので、ずらせるなら 4 月以降に。'));
+      break;
+    case 4:
+      out.push(tip('new_fiscal', '新年度は固定費の見直しにちょうどいい時期', '携帯のプラン、保険、使っていないサブスク。1 回見直すと、我慢しなくても毎月ずっと効きます。歓迎会も重なるので、交際費は回数を先に決めておきましょう。'));
+      break;
+    case 5:
+      out.push(tip('gw_car_tax', 'GW の旅行と、自動車を持っているなら自動車税（5 月末まで）', '連休中は交通費・宿泊費が一番高い時期です。旅行に行くなら、予算を先に決めて「旅行」の分を別に取っておくと、ほかの月に響きません。'));
+      break;
+    case 6:
+      out.push(tip('resident_tax', '6 月から住民税の額が変わります', '6 月の給与明細で、手取りがいくら変わったかを確かめましょう。変わっていたら、給料の自動記録の金額も直しておくと見通しがずれません。', '#/recurring'));
+      out.push(tip('summer_bonus', '夏のボーナスは「入った日に分ける」', '返済・貯金・使う分の 3 つに、入った日のうちに分けるのがいちばん確実です。使う分を先に決めておくと、気持ちよく使えます。'));
+      break;
+    case 7:
+      out.push(tip('summer_sale', '夏のセールは 48 時間ルールで', '欲しい物はカートに入れて 2 日待ってみましょう。それでも欲しければ買う。これだけで「なんとなく買い」がかなり減ります。冷房の電気代が上がる時期でもあります。'));
+      break;
+    case 8:
+      out.push(tip('obon', 'お盆の帰省・旅行は早めの予約で', '新幹線や飛行機は早割を使うと大きく変わります。お土産や外食も重なるので、「お盆の分」を先に取っておきましょう。'));
+      break;
+    case 9:
+      out.push(tip('half_year', '半年のふり返りにちょうどいい月です', 'サマリで 1 月からの収支を見て、ペースどおりか確かめてみましょう。年末のボーナス・ふるさと納税・忘年会の予定も、今のうちにざっくり考えておくと楽です。'));
+      break;
+    case 10:
+      if (r.forecast.income > 0) out.push(tip('furusato_start', 'ふるさと納税は今の時期に始めると楽です', '実質 2,000 円の負担で返礼品がもらえます。上限は年収や家族構成で変わるので、源泉徴収票や各サイトのシミュレーターで確かめてから。年末にまとめてやると、上限の確認や受け取りが大変になりがちです。'));
+      break;
+    case 11:
+      out.push(tip('year_end_adjust', '年末調整の書類を用意しましょう', '生命保険料・地震保険料の控除証明書、iDeCo の掛金の証明書などが 10〜11 月に届きます。出し忘れると、税金が戻る分を逃します。'));
+      out.push(tip('black_friday', 'ブラックフライデーは 48 時間ルールで', '「安いから買う」は節約になりません。前から欲しかった物だけをリストにしてから見ましょう。'));
+      break;
+    case 12:
+      if (r.forecast.income > 0) out.push(tip('furusato_deadline', 'ふるさと納税は 12/31 まで', 'その年の分は 12/31 の支払いまで。上限は年収で変わるので、源泉徴収票の見込みやシミュレーターで確かめてから。年末は混み合うので、早めに済ませましょう。'));
+      out.push(tip('bonenkai', '12 月は忘年会が増えやすい月です', `${social ? `先月の交際費は ${yen(social.actual)}。` : ''}行く会を先に選んで回数を決めておきましょう。二次会は「行かない」と決めておくだけで、1 回あたり数千円変わります。`, '#/goals'));
+      out.push(tip('nisa_year_end', 'NISA の今年の枠は繰り越せません', '使っていない枠があっても、来年に持ち越せません。無理に入れる必要はありませんが、積立の設定が止まっていないかだけ確かめておきましょう。'));
+      break;
+  }
+  return out.slice(0, MONTHLY_LIMITS.seasonalMax);
+}
+
+/** お金の知恵（毎月 1 つ、その人の数字で。当てはまるものから月ごとに順番に） */
+function evergreen(r: MonthlyReport): Advice[] {
+  const ym = r.next.end.slice(0, 7);
+  const living = r.forecast.fixed + r.forecast.variable;
+  const hourly = r.forecast.income > 0 ? Math.round(r.forecast.income / 160) : 0;
+  const rate = r.income > 0 ? r.balance / r.income : null;
+  const tip = (id: string, title: string, body: string, href?: string): Advice => ({ rule: `m_info_${id}`, key: `m_info_${id}:${ym}`, level: 'info', priority: 44, title, body, ...(href ? { href } : {}) });
+  const cands: Advice[] = [];
+  if (living > 0) cands.push(tip('emergency_fund', `いざという時のお金は ${yen(Math.round(living * 3 / 10000) * 10000)}〜${yen(Math.round(living * 6 / 10000) * 10000)} が目安`, `あなたの 1 か月の生活費（見込み）は約 ${yen(living)}。病気や転職で収入が止まっても困らないように、その 3〜6 か月分を「使わない口座」に置いておくのが基本です。これがあると、リボやカードの分割に頼らずに済みます。`));
+  if (hourly > 0) cands.push(tip('hourly', `あなたの 1 時間は約 ${yen(hourly)}`, `手取りを月 160 時間で割った額です。1 万円の買い物は約 ${Math.round(10000 / hourly * 10) / 10} 時間分の働き。迷ったら「何時間分か」で考えると、本当に欲しいかが見えてきます。`));
+  if (rate !== null && r.income > 0) cands.push(tip('saving_rate', rate > 0 ? `先月は手取りの ${Math.round(rate * 100)}% が残りました` : '先月は手取りより多く使いました', '手取りの 2 割を残せると、家計はかなり安定すると言われます。いきなりではなく、毎月 1% ずつ上げるくらいが続けやすいです。先取りの金額を少しずつ増やすのが一番確実です。', '#/goals'));
+  cands.push(tip('rule72', '72 の法則: 年率で 72 を割ると、お金が 2 倍になる年数', '年 3% なら 24 年、年 6% なら 12 年で 2 倍。逆に年 15% のリボは、約 5 年で借りた額が 2 倍になる計算です。増やすより、高い金利を払わないほうが確実に効きます。'));
+  cands.push(tip('auto_transfer', '貯金は「自動」にしたら勝ち', '給料日の翌日に、貯金用の口座へ自動で移す設定（銀行の定額自動振替など）をしておくと、意志の力がいりません。アプリの先取りの金額と同じにしておくと、記録と実際がそろいます。'));
+  cands.push(tip('cashless', 'キャッシュレスは「使った実感」が薄くなりがち', '便利な反面、現金より使いすぎやすいと言われます。使ったらすぐ記録する（このアプリ）か、カードを 1〜2 枚に絞ると、何にいくら使ったかが見えやすくなります。'));
+  cands.push(tip('fixed_first', '節約は「回数の少ないもの」から', '毎日の我慢より、携帯・保険・サブスクのように 1 回見直せばずっと効くものからのほうが、楽で大きく効きます。次に、飲み会や外食のような「1 回が大きいもの」。小さな我慢は最後で大丈夫です。'));
+  if (cands.length === 0) return [];
+  const [y, m] = ym.split('-').map(Number);
+  return [cands[(y! * 12 + m!) % cands.length]!];
+}
+
+export const MONTHLY_TIPS: ((r: MonthlyReport) => Advice[])[] = [
+  mBalance, mOverBudget, mForecastOver, mRising, mEvents, mSubscriptions, mHabit, mNoSpend, mWeekend, mGoal, revoMath, seasonal, evergreen,
 ];

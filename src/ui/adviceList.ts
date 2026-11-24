@@ -33,7 +33,7 @@ export function renderDailyAdviceList(store: AppStore, testid: string, today = n
   return list.length > 0 ? renderItems(store, list, period.start, testid) : null;
 }
 
-function renderItems(store: AppStore, shown: Advice[], periodStart: string, testid: string): HTMLElement {
+export function renderItems(store: AppStore, shown: Advice[], periodStart: string, testid: string): HTMLElement {
   const list = h('div', { class: 'advice-list', 'data-testid': testid });
   for (const a of shown) {
     const fb = store.feedbackFor(periodStart, a.key);

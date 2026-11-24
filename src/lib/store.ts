@@ -4,6 +4,7 @@ import type { Db } from './db';
 import { seedCategories, orderedSubcategories, incomeSubcategories } from './categories';
 import { nowIso, uuid } from './uuid';
 import { periodFor, toDateString } from './period';
+import { buildMonthlyReport, reportIsFresh, type MonthlyReport } from './monthlyReport';
 import type { AdviceFeedback, Budget, Category, Challenge, Debt, Goal, PaymentMethod, PaymentMethodType, RecurringRule, Settings, SyncTable, Transaction } from './types';
 import { addMonths, dueRecurringTransactions, missingInPeriod, monthInPeriod, monthKey, postingDate, type MissingPosting } from './recurring';
 import { budgetId } from './budget';
@@ -119,6 +120,7 @@ export class AppStore {
     this.challenges = await this.db.getAll<Challenge>('challenges');
     this.settings = { ...DEFAULT_SETTINGS, ...((await this.db.get<Settings>('settings', 'me')) ?? {}) };
     this.skippedPostings = new Set((await this.db.get<string[]>('meta', 'skipped-postings')) ?? []);
+    this.seenReports = new Set((await this.db.get<string[]>('meta', 'seen-reports')) ?? []);
     this.emit();
   }
 
@@ -132,6 +134,31 @@ export class AppStore {
 
   get activeRules(): RecurringRule[] {
     return this.recurringRules.filter((r) => !r.deleted_at).sort((a, b) => a.sort_order - b.sort_order || a.day_of_month - b.day_of_month);
+  }
+
+  // ---- 月終わりのふり返りと来月の見通し --------------------------------------------
+
+  private seenReports = new Set<string>();
+
+  /** 終わった期間（期間の最終日はその期間）のふり返り。記録がなければ null */
+  monthlyReport(today = new Date()): MonthlyReport | null {
+    return buildMonthlyReport({
+      transactions: this.transactions, categories: this.categories, budgets: this.budgets, rules: this.recurringRules,
+      debts: this.debts, goals: this.activeGoals, startDay: this.settings.month_start_day, today,
+    });
+  }
+
+  /** ホームで知らせるか: 期間の最終日〜次の期間の 7 日目で、まだ開いていないとき */
+  reportToAnnounce(today = new Date()): MonthlyReport | null {
+    if (!reportIsFresh(today, this.settings.month_start_day)) return null;
+    const r = this.monthlyReport(today);
+    return r && !this.seenReports.has(r.period.start) ? r : null;
+  }
+
+  async markReportSeen(periodStart: string): Promise<void> {
+    if (this.seenReports.has(periodStart)) return;
+    this.seenReports.add(periodStart);
+    await this.db.put('meta', [...this.seenReports], 'seen-reports');
   }
 
   /** 「今回はなし」にした、今の期間に入っていない固定費（`ルールID:月`。この端末だけ） */

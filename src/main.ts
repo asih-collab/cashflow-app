@@ -23,6 +23,7 @@ import { renderGoals } from './ui/views/goals';
 import { lock, onPrivacyChange } from './lib/privacy';
 import { renderSummary } from './ui/views/summary';
 import { renderHistory } from './ui/views/history';
+import { renderReport } from './ui/views/report';
 import { isIOS, isStandalone } from './ui/install';
 import { icon } from './ui/icons';
 
@@ -123,6 +124,7 @@ async function boot(): Promise<void> {
       case '/receipt': el = renderReceipt(ctx, route); break;
       case '/goals': el = renderGoals(ctx, route); break;
       case '/summary': el = renderSummary(ctx, route); break;
+      case '/report': el = renderReport(ctx); break;
       case '/history': el = renderHistory(ctx, route); break;
       default: el = renderHome(ctx);
     }
