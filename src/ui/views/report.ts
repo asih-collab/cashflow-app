@@ -47,15 +47,16 @@ export function renderReport(ctx: AppContext): HTMLElement {
   ));
 
   if (r.lines.length > 0) {
-    const table = h('div', { class: 'card tight', 'data-testid': 'report-lines' });
+    root.appendChild(h('div', { class: 'muted small', style: 'margin:14px 0 6px' }, '分類ごと: 右は来月の予算（「案」はまだ予算がない分類の見込み）'));
+    const table = h('div', { class: 'card tight budget-lines', 'data-testid': 'report-lines', style: 'margin-top:0' });
     for (const l of r.lines) {
       const over = l.budget !== null && l.actual > l.budget;
       table.appendChild(h('div', { class: 'list-item', 'data-testid': `report-line-${l.name}` },
         h('div', { class: 'row' },
           h('span', { class: 'grow', style: 'font-weight:700' }, l.name),
-          h('span', { class: 'amount' + (l.nextBudget === null ? ' muted' : ''), style: 'font-size:16px' }, l.nextBudget !== null ? `来月の予算 ${yen(l.nextBudget)}` : `案 ${yen(l.suggested)}`),
+          h('span', { class: 'amount' + (l.nextBudget === null ? ' muted' : ''), style: 'font-size:18px;white-space:nowrap' }, l.nextBudget !== null ? yen(l.nextBudget) : `案 ${yen(l.suggested)}`),
         ),
-        h('div', { class: 'recent-meta' + (over ? ' neg' : '') }, `先月 ${yen(l.actual)}${l.budget !== null ? ` / 予算 ${yen(l.budget)}` : ''} · 見込み ${yen(l.predicted)}`),
+        h('div', { class: 'recent-meta' + (over ? ' neg' : ''), style: 'white-space:normal' }, `先月 ${yen(l.actual)}${l.budget !== null ? ` / 予算 ${yen(l.budget)}` : ''} · 見込み ${yen(l.predicted)}`),
       ));
     }
     root.appendChild(table);

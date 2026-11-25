@@ -430,3 +430,4 @@ a.advice-title::after { content: " →"; color: var(--muted); font-weight: 400; 
   .rotate-lock span { font-size: 13px; color: var(--muted); max-width: 420px; line-height: 1.6; }
   .rotate-lock-phone { width: 28px; height: 46px; border: 2px solid var(--accent); border-radius: 6px; margin-bottom: 6px; }
 }
+.recent-meta.neg { color: var(--neg); }
