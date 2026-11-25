@@ -174,7 +174,10 @@ export class AppStore {
     // 貯金の目標の先取りは「来月から」と決めて作るので、確認しない
     const goalCats = new Set(this.goals.filter((g) => !g.deleted_at).map((g) => g.category_id));
     const rules = this.recurringRules.filter((r) => !goalCats.has(r.category_id ?? ''));
-    return missingInPeriod(rules, new Set(this.transactions.map((t) => t.id)), periodFor(today, this.settings.month_start_day), this.skippedPostings);
+    // 同じカテゴリ・同じ日付の自動記録がもうあれば、その分は入っている（内訳に分ける前の、まとめたルールの記録など）
+    const covered = new Set(this.transactions.filter((t) => !t.deleted_at && t.source === 'recurring').map((t) => `${t.category_id}:${t.date}`));
+    return missingInPeriod(rules, new Set(this.transactions.map((t) => t.id)), periodFor(today, this.settings.month_start_day), this.skippedPostings)
+      .filter((m) => !covered.has(`${m.rule.category_id}:${m.date}`));
   }
 
   /** 確認して「記録する」: その月の分だけを、自動記録と同じ ID・予定の日付で記録する（ほかの月は増やさない。内訳に分けた後でも二重にならない） */

@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { missingInPeriod, monthInPeriod, recurringTransactionId, splitSuggestions } from '../../src/lib/recurring';
 import { periodFor } from '../../src/lib/period';
 import { Db } from '../../src/lib/db';
@@ -65,8 +65,12 @@ describe('ストア: 期間に合わせた開始月と確認', () => {
 });
 
 describe('ストア: 内訳に分ける', () => {
-  it('まとめたサブスクを内訳に分けると、これまでの記録は残り、内訳は次の月から。今の期間の分は内訳ごとに選べて二重にならない', async () => {
-    const s = new AppStore(new Db(new IDBFactory(), 'split'));
+  afterEach(() => { vi.useRealTimers(); });
+  // 11/4: 今の期間 10/25〜11/24 の 27 日は前の月（まとめたルールでは未記録）。11/26: 今の期間 11/25〜 の 27 日は今月（まとめたルールで記録済み）
+  it.each([['11/4', new Date(2026, 10, 4, 12)], ['11/26', new Date(2026, 10, 26, 12)]])('まとめたサブスクを内訳に分けると、これまでの記録は残り、内訳は次の月から。今の期間の分は内訳ごとに選べて二重にならない（%s）', async (_label, now) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    const s = new AppStore(new Db(new IDBFactory(), `split-${_label}`));
     await s.init();
     const today = new Date();
     await s.updateSettings({ month_start_day: 25 });
@@ -95,7 +99,7 @@ describe('ストア: 内訳に分ける', () => {
       const posted = s.liveTransactions.filter((t) => parts.some((r) => r.id === t.recurring_rule_id));
       expect(posted.map((t) => [t.memo, t.date])).toEqual([['動画', `${m}-27`], ['音楽', `${m}-27`]]); // その月の分だけ
     } else {
-      expect(missing).toEqual([]);
+      expect(missing).toEqual([]); // まとめたルールで今の期間の分は記録済み → 内訳では出さない（二重にしない）
     }
   });
 });
