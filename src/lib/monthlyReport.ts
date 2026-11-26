@@ -147,13 +147,21 @@ export function buildMonthlyReport(input: {
   // 来月の固定費・収入（自動記録のルールで、来月の期間に入る分）
   let fIncome = 0, fFixed = 0;
   const subscriptions: { name: string; amount: number }[] = [];
+  const counted = new Set<string>();
   for (const r of input.rules) {
     if (!r.is_active || r.deleted_at) continue;
     const m = monthInPeriod(r.day_of_month, next);
     if (!m || m < r.start_month || (r.end_month && m > r.end_month)) continue;
+    counted.add(r.id);
     if (r.type === 'income') fIncome += r.amount; else fFixed += r.amount;
     const cat = byId.get(r.category_id ?? '');
     if (r.type === 'expense' && (cat?.parent_id ?? cat?.id) === SUBSCRIPTION_PARENT) subscriptions.push({ name: r.name, amount: r.amount });
+  }
+  // 来月の期間にもう入っている自動記録で、上のルールで数えていないもの（止めたルールの記録・確認で入れた分など）も足す
+  for (const t of tx) {
+    if (t.source !== 'recurring' || t.date < next.start || t.date > next.end || (t.recurring_rule_id && counted.has(t.recurring_rule_id))) continue;
+    if (t.type === 'income') fIncome += t.amount;
+    else if ((byId.get(t.category_id ?? '')?.kind ?? 'variable') !== 'variable') fFixed += t.amount;
   }
   const fVariable = lines.reduce((a, l) => a + l.predicted, 0);
 

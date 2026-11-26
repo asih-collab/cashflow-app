@@ -72,6 +72,11 @@ describe('月終わりのふり返り', () => {
     expect(r.forecast.income).toBe(300000);
     expect(r.forecast.fixed).toBe(100000 + 1500 + 1000);
     expect(r.subscriptions.map((x) => x.name)).toEqual(['動画', '音楽']);
+    // 来月の期間にもう入っている自動記録で、ルールで数えていないもの（止めたルールの記録など）も見込みに入る
+    const withPosted = buildMonthlyReport({ ...base, transactions: [...t, tx('2026-11-30', 5000, 'サブスク', { source: 'recurring', recurring_rule_id: 'r-old' })], budgets: [] })!;
+    expect(withPosted.forecast.fixed).toBe(r.forecast.fixed + 5000);
+    const counted = buildMonthlyReport({ ...base, transactions: [...t, tx('2026-11-27', 100000, '家賃', { source: 'recurring', recurring_rule_id: 'r-家賃' })], budgets: [] })!;
+    expect(counted.forecast.fixed).toBe(r.forecast.fixed); // ルールで数えた分は二重にしない
     expect(r.events).toEqual([{ label: 'カードAの一括返済', amount: 100000, kind: 'debt' }, { label: '旅行資金への入金', amount: 50000, kind: 'goal' }]);
 
     const rules = r.tips.map((x) => x.rule);
